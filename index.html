@@ -19,7 +19,7 @@ body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;b
 .box .ic{font-size:48px;margin-bottom:12px}
 .box h1{margin:0 0 8px;font-size:22px;color:#0f172a}
 .box p{margin:0 0 20px;color:var(--mut);font-size:15px}
-input[type=password],input[type=text],input[type=number],select{width:100%;padding:12px 16px;border:2px solid var(--bd);border-radius:10px;font-size:15px;outline:none;transition:.2s;margin-bottom:12px;font-family:inherit;}
+input[type=password],input[type=text],input[type=number],input[type=datetime-local],select{width:100%;padding:12px 16px;border:2px solid var(--bd);border-radius:10px;font-size:15px;outline:none;transition:.2s;margin-bottom:12px;font-family:inherit;}
 input[type=checkbox]{width:18px;height:18px;accent-color:var(--pri);cursor:pointer;}
 input:focus,textarea:focus,select:focus{border-color:var(--pri);box-shadow:0 0 0 4px rgba(37,99,235,.15)}
 .err{color:var(--bad);font-size:14px;margin-bottom:12px;min-height:20px}
@@ -82,6 +82,14 @@ img.im{max-width:100%;height:auto;border-radius:8px;margin:8px 0}
 .gr .q:last-child{margin-bottom:0}
 .gr .q{margin-bottom:14px}
 @media(max-width:820px){.grp.two{grid-template-columns:1fr}.gl{position:static;max-height:none}}
+.sch-box{display:flex;flex-wrap:wrap;gap:16px;align-items:flex-end;margin-top:15px;background:#f8fafc;padding:15px;border-radius:10px;border:1px solid var(--bd)}
+.sch-box label{display:block;font-weight:600;font-size:14px;margin-bottom:4px}
+.sch-box input[type=datetime-local]{width:230px;margin:0}
+.sch-state{margin:0 0 16px;padding:12px 14px;border-radius:10px;font-size:14px;line-height:1.7;text-align:left;border:1px solid var(--bd);background:#f8fafc;color:var(--tx)}
+.sch-state.wait{background:#fef3c7;border-color:#fde68a;color:#92400e}
+.sch-state.open{background:var(--okbg);border-color:#86efac;color:#166534}
+.sch-state.closed{background:var(--badbg);border-color:#fca5a5;color:#991b1b}
+.sch-count{display:block;font-size:26px;font-weight:800;text-align:center;margin-top:4px;font-variant-numeric:tabular-nums}
 </style>
 </head>
 <body>
@@ -104,6 +112,7 @@ img.im{max-width:100%;height:auto;border-radius:8px;margin:8px 0}
     <div class="ic">🎓</div>
     <h1 id="s-exam-name">Đang tải đề thi...</h1>
     <p>Vui lòng nhập thông tin để bắt đầu làm bài</p>
+    <div id="s-schedule" class="sch-state hide"></div>
     <input type="text" id="s-name" placeholder="Họ và tên học sinh" required>
     <input type="text" id="s-class" placeholder="Lớp (Ví dụ: 12A1)" required>
     <button class="btn gr" type="submit" id="btn-start-exam" disabled>Bắt đầu làm bài</button>
@@ -171,6 +180,20 @@ img.im{max-width:100%;height:auto;border-radius:8px;margin:8px 0}
             </label>
         </div>
 
+        <!-- Nhóm Hạn thời gian mở / đóng đề -->
+        <div class="sch-box">
+            <div>
+                <label for="open-at">🟢 Giờ mở đề (bắt đầu)</label>
+                <input type="datetime-local" id="open-at">
+            </div>
+            <div>
+                <label for="close-at">🔴 Giờ đóng đề (kết thúc)</label>
+                <input type="datetime-local" id="close-at">
+            </div>
+            <button class="btn sec" type="button" id="btn-clear-sch" style="margin-bottom:0">Bỏ hạn thời gian</button>
+            <div class="note" style="flex-basis:100%;margin:0">Để trống = không giới hạn. Học sinh chỉ vào làm được trong khoảng này, đến giờ đóng đề hệ thống tự nộp bài. Sau khi lưu nhớ xuất lại exams.json và tải lên Github.</div>
+        </div>
+
       </div>
     </div>
     <div id="list-teacher"></div>
@@ -208,6 +231,23 @@ let studentData = { name: '', class: '', startTime: 0 };
 let timerInterval, timeLeft = 0, submitted = false;
 const LK = 'exams_v2';
 const L4 = 'ABCD';
+
+// ================= HẠN THỜI GIAN MỞ / ĐÓNG ĐỀ =================
+// serverOffset = (giờ máy chủ) - (giờ máy học sinh). Dùng giờ máy chủ để học sinh chỉnh đồng hồ máy cũng không qua mặt được.
+let serverOffset = 0, gateTimer = null;
+const nowMs = () => Date.now() + serverOffset;
+const p2 = n => String(n).padStart(2, '0');
+const toLocalInput = ms => {
+    if(!ms) return '';
+    const d = new Date(ms);
+    return `${d.getFullYear()}-${p2(d.getMonth()+1)}-${p2(d.getDate())}T${p2(d.getHours())}:${p2(d.getMinutes())}`;
+};
+const fromLocalInput = v => { const t = v ? new Date(v).getTime() : 0; return isFinite(t) ? t : 0; };
+const fmtDT = ms => { const d = new Date(ms); return `${p2(d.getHours())}:${p2(d.getMinutes())} ngày ${p2(d.getDate())}/${p2(d.getMonth()+1)}/${d.getFullYear()}`; };
+const fmtCountdown = sec => {
+    const d = Math.floor(sec / 86400), h = Math.floor(sec % 86400 / 3600), m = Math.floor(sec % 3600 / 60), s = sec % 60;
+    return (d ? d + ' ngày ' : '') + `${p2(h)}:${p2(m)}:${p2(s)}`;
+};
 
 // ================= KIỂM TRA ROUTING =================
 const urlParams = new URLSearchParams(window.location.search);
@@ -256,7 +296,7 @@ function showLib() {
         return `
         <div class="lr">
             <div class="lr-info"><span class="no">${i+1}</span>
-            <div><b>${esc(x.name)}</b><div class="note">${x.items.filter(k=>k.k==='q').length} câu • Cài đặt: ${x.time||0} phút - Thang điểm: ${tScale}</div></div></div>
+            <div><b>${esc(x.name)}</b><div class="note">${x.items.filter(k=>k.k==='q').length} câu • Cài đặt: ${x.time||0} phút - Thang điểm: ${tScale}${(x.openAt||x.closeAt) ? `<br>🕒 ${x.openAt ? 'Mở: ' + fmtDT(x.openAt) : 'Mở: ngay'} — ${x.closeAt ? 'Đóng: ' + fmtDT(x.closeAt) : 'không giới hạn'}` : ''}</div></div></div>
             <div style="display:flex;gap:8px">
                 <button class="btn sec" onclick="openExam('${x.id}')">Quản lý</button>
                 <button class="btn sec" style="color:var(--bad);border-color:var(--bad)" onclick="delExam('${x.id}')">Xóa</button>
@@ -279,6 +319,8 @@ window.openExam = (id) => {
     
     // Nạp cài đặt cũ (nếu có), mặc định bật xáo câu hỏi & xáo đáp án, tắt xáo nhóm
     $('time-limit').value = exam.time || 0;
+    $('open-at').value = toLocalInput(exam.openAt);
+    $('close-at').value = toLocalInput(exam.closeAt);
     $('exam-scale').value = exam.scale || 'other';$('chk-shuf-grp').checked = !!exam.shufGrp; 
     $('chk-shuf-q').checked = exam.shufQ !== false; 
     $('chk-shuf-opt').checked = exam.shufOpt !== false; 
@@ -289,6 +331,11 @@ window.openExam = (id) => {
 
 $('btn-save-settings').onclick = () => {
     if(exam) {
+        const oa = fromLocalInput($('open-at').value), ca = fromLocalInput($('close-at').value);
+        if(oa && ca && ca <= oa) return alert('Giờ đóng đề phải sau giờ mở đề. Vui lòng kiểm tra lại.');
+        if(ca && ca <= Date.now() && !confirm('Giờ đóng đề đã qua, học sinh sẽ không vào làm được. Vẫn lưu?')) return;
+        exam.openAt = oa;
+        exam.closeAt = ca;
         exam.time = parseInt($('time-limit').value) || 0;
         exam.scale = $('exam-scale').value;
         exam.shufGrp = $('chk-shuf-grp').checked;
@@ -298,6 +345,8 @@ $('btn-save-settings').onclick = () => {
         alert('Đã lưu cài đặt! Nhớ xuất lại file exams.json để cập nhật lên Github.');
     }
 };
+
+$('btn-clear-sch').onclick = () => { $('open-at').value = ''; $('close-at').value = ''; };
 
 $('btn-copy-link').onclick = () => {
     if(!exam) return;
@@ -324,6 +373,7 @@ $('li').onchange = async e => {
             at: x.at||Date.now(), 
             items: x.items, eq: x.eq||[], img: x.img||[], 
             time: x.time||0, scale: x.scale||'other',
+            openAt: x.openAt||0, closeAt: x.closeAt||0,
             shufGrp: !!x.shufGrp, shufQ: x.shufQ !== false, shufOpt: x.shufOpt !== false
         });
         n++;
@@ -551,11 +601,11 @@ $('file').onchange = async e => {
     
     const ex={
         id:'e'+Date.now(), name:f.name.replace(/\.docx$/i,''), at:Date.now(), 
-        items, eq, img:IM, time:0, scale:'other',
+        items, eq, img:IM, time:0, scale:'other', openAt:0, closeAt:0,
         shufGrp: false, shufQ: true, shufOpt: true
     };
     const old=lib.find(y=>y.name===ex.name);
-    if(old){ ex.id=old.id; ex.time=old.time||0; ex.scale=old.scale||'other'; ex.shufGrp=!!old.shufGrp; ex.shufQ=old.shufQ!==false; ex.shufOpt=old.shufOpt!==false; }
+    if(old){ ex.id=old.id; ex.time=old.time||0; ex.openAt=old.openAt||0; ex.closeAt=old.closeAt||0; ex.scale=old.scale||'other'; ex.shufGrp=!!old.shufGrp; ex.shufQ=old.shufQ!==false; ex.shufOpt=old.shufOpt!==false; }
     lib=lib.filter(y=>y.name!==ex.name); lib.push(ex); saveLib();
     openExam(ex.id);
     
@@ -719,8 +769,13 @@ async function initStudentFlow(id) {
     $('student-login').classList.remove('hide');
     
     try {
-        const res = await fetch('exams.json?t=' + Date.now());
+        const t0 = Date.now();
+        const res = await fetch('exams.json?t=' + t0, { cache: 'no-store' });
+        const t1 = Date.now();
         if (!res.ok) throw new Error('Không tìm thấy file exams.json');
+        // Lấy giờ chuẩn từ máy chủ (header Date) để đối chiếu với đồng hồ máy học sinh
+        const sd = Date.parse(res.headers.get('Date') || '');
+        if (isFinite(sd)) serverOffset = sd - (t0 + t1) / 2;
         const data = await res.json();
         exam = data.find(x => x.id === id);
     } catch(e) {
@@ -746,17 +801,53 @@ async function initStudentFlow(id) {
     }
 
     $('s-exam-name').textContent = exam.name;
-    $('btn-start-exam').disabled = false;
+    
+    // Kiểm tra hạn thời gian mở/đóng đề (cập nhật mỗi giây)
+    updateGate();
+    if(exam.openAt || exam.closeAt) gateTimer = setInterval(updateGate, 1000);
     
     $('sf').onsubmit = (e) => {
         e.preventDefault();
+        if(gateState() !== 'open') { updateGate(); return; }
         studentData.name = $('s-name').value.trim();
         studentData.class = $('s-class').value.trim();
         startStudentExam();
     };
 }
 
+function gateState() {
+    const n = nowMs(), o = exam.openAt || 0, c = exam.closeAt || 0;
+    if(o && n < o) return 'wait';
+    if(c && n >= c) return 'closed';
+    return 'open';
+}
+
+function updateGate() {
+    const st = gateState(), box = $('s-schedule'), btn = $('btn-start-exam');
+    const n = nowMs(), o = exam.openAt || 0, c = exam.closeAt || 0;
+    let html = '';
+    if(o) html += `🟢 Mở đề: <b>${fmtDT(o)}</b><br>`;
+    if(c) html += `🔴 Đóng đề: <b>${fmtDT(c)}</b>`;
+    box.className = 'sch-state ' + st;
+    btn.disabled = st !== 'open';
+    
+    if(st === 'wait') {
+        html += `<span class="sch-count">⏳ Còn ${fmtCountdown(Math.ceil((o - n) / 1000))}</span>Chưa đến giờ làm bài. Em có thể nhập sẵn họ tên và lớp, nút bắt đầu sẽ tự mở khi đến giờ.`;
+    } else if(st === 'closed') {
+        if(gateTimer) { clearInterval(gateTimer); gateTimer = null; }
+        html += `<br><b>Đề thi đã đóng.</b> Em không thể làm bài nữa. Vui lòng liên hệ giáo viên nếu cần.`;
+        $('s-name').style.display = 'none'; $('s-class').style.display = 'none'; btn.style.display = 'none';
+    } else if(c) {
+        html += `<br>Đề đang mở. Còn <b>${fmtCountdown(Math.ceil((c - n) / 1000))}</b> đến giờ đóng đề.`;
+    } else if(o) {
+        html += `<br>Đề đang mở, em có thể bắt đầu làm bài.`;
+    }
+    box.innerHTML = html;
+    box.classList.toggle('hide', !html);
+}
+
 function startStudentExam() {
+    if(gateTimer) { clearInterval(gateTimer); gateTimer = null; }
     $('student-login').classList.add('hide');
     $('app-student').classList.remove('hide');$('sh-exam-name').textContent = exam.name;
     $('student-info-bar').textContent = `Học sinh: ${studentData.name} - Lớp: ${studentData.class}`;
@@ -767,13 +858,20 @@ function startStudentExam() {
     studentData.startTime = Date.now();
     renderStudentExam();
     
-    // Hẹn giờ
-    if(exam.time && exam.time > 0) {
+    // Hẹn giờ: hết thời gian làm bài HOẶC đến giờ đóng đề (lấy mốc nào đến trước)
+    let endAt = Infinity;
+    if(exam.time && exam.time > 0) endAt = nowMs() + exam.time * 60000;
+    if(exam.closeAt && exam.closeAt > 0) {
+        if(exam.closeAt < endAt) {
+            $('student-info-bar').textContent += ` - Đề đóng lúc ${fmtDT(exam.closeAt)}`;
+        }
+        endAt = Math.min(endAt, exam.closeAt);
+    }
+    if(isFinite(endAt)) {
         $('timer-display').classList.remove('hide');
-        // Tính theo mốc thời gian thực để không bị lệch khi tab bị trình duyệt làm chậm
-        const endAt = Date.now() + exam.time * 60000;
+        // Tính theo mốc thời gian thực (giờ máy chủ) để không bị lệch khi tab bị trình duyệt làm chậm
         const tick = () => {
-            timeLeft = Math.max(0, Math.ceil((endAt - Date.now()) / 1000));
+            timeLeft = Math.max(0, Math.ceil((endAt - nowMs()) / 1000));
             updateTimerUI();
             if(timeLeft <= 0) { clearInterval(timerInterval); autoSubmit(); }
         };
@@ -861,7 +959,7 @@ $('btn-submit-exam').onclick = () => {
 
 function autoSubmit() {
     if(submitted) return;
-    alert('Đã hết thời gian làm bài! Hệ thống tự động nộp bài.');
+    alert('Đã hết thời gian làm bài (hoặc đã đến giờ đóng đề)! Hệ thống tự động nộp bài.');
     processSubmission();
 }
 
