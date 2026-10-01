@@ -60,7 +60,7 @@ textarea{width:100%;padding:12px;border:2px solid var(--bd);border-radius:10px;f
 .fb{margin-top:12px;font-weight:600;padding:10px;border-radius:8px;background:#f8fafc}
 .fb.good{color:var(--ok);background:var(--okbg)}.fb.no{color:var(--bad);background:var(--badbg)}
 img.im{max-width:100%;height:auto;border-radius:8px;margin:8px 0}
-.timer-box{position:fixed;top:60px;right:20px;background:var(--card);padding:10px 20px;border-radius:30px;box-shadow:0 4px 15px rgba(0,0,0,.1);font-weight:700;font-size:18px;color:var(--pri);border:2px solid var(--pri);z-index:20;display:flex;align-items:center;gap:8px}
+.timer-box{position:fixed;top:92px;right:20px;background:var(--card);padding:10px 20px;border-radius:30px;box-shadow:0 4px 15px rgba(0,0,0,.1);font-weight:700;font-size:18px;color:var(--pri);border:2px solid var(--pri);z-index:20;display:flex;align-items:center;gap:8px}
 .timer-box.danger{color:var(--bad);border-color:var(--bad);animation:pulse 1s infinite}
 @keyframes pulse{0%{transform:scale(1)}50%{transform:scale(1.05)}100%{transform:scale(1)}}
 .sa-input{width:100%;max-width:400px;font-weight:600;color:var(--pri)}
@@ -68,6 +68,7 @@ img.im{max-width:100%;height:auto;border-radius:8px;margin:8px 0}
 .tf-row:hover{background:transparent!important;border-color:transparent!important}
 .tf-btn{flex:1;text-align:center;padding:8px}
 .tf-btn.selected{background:var(--pri);color:#fff}
+.btn.sec.tf-btn.selected,.btn.sec.tf-btn.selected:hover:not(:disabled){background:var(--pri);color:#fff}
 .student-hdr{background:var(--pri);color:#fff;padding:15px 20px;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;z-index:20;box-shadow:0 4px 12px rgba(0,0,0,.15)}
 #student-info-bar{font-size:14px;opacity:0.9}
 .overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:50}
@@ -82,7 +83,7 @@ img.im{max-width:100%;height:auto;border-radius:8px;margin:8px 0}
     <div class="ic">👨‍🏫</div>
     <h1>Quản lý Thi Trắc nghiệm</h1>
     <p>Dành cho giáo viên quản trị</p>
-    <input type="password" id="pw" placeholder="Nhập mật khẩu (Mặc định: 28011981)" autocomplete="current-password" autofocus>
+    <input type="password" id="pw" placeholder="Nhập mật khẩu" autocomplete="current-password" autofocus>
     <div class="err" id="err"></div>
     <button class="btn" type="submit">Đăng nhập</button>
   </form>
@@ -120,7 +121,7 @@ img.im{max-width:100%;height:auto;border-radius:8px;margin:8px 0}
       <div class="bar">
         <label class="btn" for="file">📂 Tải file Word đề gốc (.docx)</label>
         <input type="file" id="file" accept=".docx" hidden>
-        <button class="btn sec" id="lx">⬆ Xuất thư viện (exams.json)</button>
+        <button class="btn sec" id="lx">⬆️ Xuất thư viện (exams.json)</button>
         <label class="btn sec" for="li">⬇️ Nhập thư viện</label>
         <input type="file" id="li" accept=".json" hidden>
       </div>
@@ -196,7 +197,7 @@ const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;',
 
 let base=[], cur=[], lib=[], exam=null;
 let studentData = { name: '', class: '', startTime: 0 };
-let timerInterval, timeLeft = 0;
+let timerInterval, timeLeft = 0, submitted = false;
 const LK = 'exams_v2';
 const L4 = 'ABCD';
 
@@ -234,7 +235,11 @@ function loadLib() {
     try { lib = JSON.parse(localStorage.getItem(LK) || '[]'); } catch(e) { lib = []; }
     showLib();
 }
-function saveLib() { localStorage.setItem(LK, JSON.stringify(lib)); showLib(); }
+function saveLib() {
+    try { localStorage.setItem(LK, JSON.stringify(lib)); }
+    catch(e) { alert('Không lưu được vào bộ nhớ trình duyệt (có thể đã đầy do nhiều ảnh/công thức). Hãy xuất exams.json ngay để khỏi mất dữ liệu, sau đó xóa bớt đề cũ.'); }
+    showLib();
+}
 
 function showLib() {
     $('lt').textContent = `📚 Danh sách đề thi (${lib.length})`;
@@ -254,7 +259,7 @@ function showLib() {
 
 window.delExam = (id) => {
     if(confirm('Xóa đề thi này?')) { 
-        lib = lib.filter(x => x.id !== id); saveLib(); 
+        if(exam && exam.id === id) exam = null; lib = lib.filter(x => x.id !== id); saveLib(); 
         $('reqbox').classList.add('hide');$('list-teacher').innerHTML=''; 
     }
 };
@@ -262,25 +267,16 @@ window.delExam = (id) => {
 window.openExam = (id) => {
     exam = lib.find(x => x.id === id);
     if(!exam) return;
-    $('reqbox').classList.remove('hide');
-    $('cur-exam-name').textContent = exam.name;
+    $('reqbox').classList.remove('hide');$('cur-exam-name').textContent = exam.name;
     
     // Nạp cài đặt cũ (nếu có), mặc định bật xáo câu hỏi & xáo đáp án, tắt xáo nhóm
     $('time-limit').value = exam.time || 0;
-    $('exam-scale').value = exam.scale || 'other';
-    $('chk-shuf-grp').checked = !!exam.shufGrp; 
+    $('exam-scale').value = exam.scale || 'other';$('chk-shuf-grp').checked = !!exam.shufGrp; 
     $('chk-shuf-q').checked = exam.shufQ !== false; 
     $('chk-shuf-opt').checked = exam.shufOpt !== false; 
 
     cur = JSON.parse(JSON.stringify(exam.items)); 
     renderTeacherPreview();
-};
-
-// Tự động tích chọn đảo nhóm nếu chọn Tiếng Anh
-$('exam-scale').onchange = (e) => {
-    if(e.target.value === 'english') {
-        $('chk-shuf-grp').checked = true;
-    }
 };
 
 $('btn-save-settings').onclick = () => {
@@ -313,9 +309,9 @@ $('li').onchange = async e => {
     const a = JSON.parse(await f.text());
     let n=0;
     a.forEach(x => {if(x && x.name && Array.isArray(x.items)){
-        lib = lib.filter(y => y.name !== x.name);
+        lib = lib.filter(y => y.name !== x.name && (!x.id || y.id !== x.id));
         lib.push({
-            id: 'e'+Date.now()+n, 
+            id: x.id || ('e'+Date.now()+n), 
             name: x.name, 
             at: x.at||Date.now(), 
             items: x.items, eq: x.eq||[], img: x.img||[], 
@@ -387,7 +383,7 @@ async function pre(buf){
             let t='';
             try{t=omml(new DOMParser().parseFromString(`<r xmlns:m="${MN}" xmlns:w="${WN}">${m}</r>`,'application/xml').documentElement.firstElementChild).replace(/\s+/g,' ').trim()}catch(e){}
             const u=/<w:u [^>]*w:val="(?!none)/.test(m);
-            return`<w:r>${u?'<w:rPr><w:u w:val="single"/></w:rPr>':''}<w:t xml:space="preserve">⟪${eq.push({t,x:m})-1}⟫</w:t></w:r>`;
+            return`<w:r>${u?'<w:rPr><w:u w:val="single"/></w:rPr>':''}<w:t xml:space="preserve">⟪${eq.push({t})-1}⟫</w:t></w:r>`;
           });
         z.file('word/document.xml',x);
         buf=await z.generateAsync({type:'arraybuffer'});
@@ -462,7 +458,9 @@ function classify(items){
   if(q.length)fin();
 }
 
+let parseSkipped=0;
 function parse(T,F){
+  parseSkipped=0;
   const re=/(?:^|\n)[ \t]*(?:câu|question)\s*\d+\s*[.:)]?[ \t]*/gi,ms=[...T.matchAll(re)],out=[];
   if(!ms.length)return out;
   out.push(...blocks(T,F,0,ms[0].index));
@@ -472,41 +470,36 @@ function parse(T,F){
     // Nhận diện Trả lời ngắn
     const saMatch = /(?:^|\n)[ \t]*ĐÁP ÁN\s*:\s*/i.exec(seg);
     if(saMatch){
-      out.push({ k:'q', qtype:'sa', stem: mk(T,F,s, s+saMatch.index), ansRuns: mk(T,F, s+saMatch.index+saMatch[0].length, e) });
+      const a = s+saMatch.index+saMatch[0].length;
+      let ae = T.indexOf('\n', a); if(ae<0||ae>e) ae=e;   // đáp án chỉ lấy đến hết dòng
+      out.push({ k:'q', qtype:'sa', stem: mk(T,F,s, s+saMatch.index), ansRuns: mk(T,F,a,ae) });
+      out.push(...blocks(T,F,ae,e));                      // giữ lại tiêu đề/đoạn văn đứng sau
       return;
     }
 
-    const P=[]; let p=0, endD=s;
     const labels = ['A','B','C','D'];
-    let isTF = false;
-    
-    for(const L of labels){
-      // Đã tinh chỉnh Regex cực kỳ cẩn thận để tránh nhận nhầm chữ "A. Đúng" của trắc nghiệm thường.
-      // Bắt buộc phải là "A. Đ." hoặc "A. S." có dấu chấm đi kèm
-      const x = new RegExp('(^|\\s)'+L+'\\s*[.)]\\s*(Đ\\.|S\\.)\\s*', 'i').exec(seg.slice(p));
-      
-      // Nếu regex này không khớp (ví dụ câu trắc nghiệm thường), nó sẽ rơi xuống check thường
-      if(x) {
-          isTF = true;
-          P.push({
-              s1: p+x.index+x[1].length,
-              s2: p+x.index+x[0].length,
-              key: x[2].trim().toUpperCase().startsWith('Đ') ? 'D' : 'S'
-          });
-          p+=x.index+x[0].length;
-      } else {
-          // Bắt đáp án A, B, C, D của MC bình thường
-          const mcReg = new RegExp('(^|\\s)'+L+'\\s*[.)]\\s*').exec(seg.slice(p));
-          if(!mcReg) return;
-          P.push({
-              s1: p+mcReg.index+mcReg[1].length,
-              s2: p+mcReg.index+mcReg[0].length,
-              key: null
-          });
-          p+=mcReg.index+mcReg[0].length;
+    // Quét 4 phương án A-D. useMark=true: nhận diện ký hiệu Đ./S./Đúng/Sai (dạng câu Đúng/Sai)
+    const scan = useMark => {
+      const P=[]; let p=0;
+      for(const L of labels){
+        const x = new RegExp('(^|\\s)'+L+'\\s*[.)]\\s*','i').exec(seg.slice(p));
+        if(!x) return null;
+        let adv = x[0].length, key = null;
+        if(useMark){
+          const mm = /^(?:(Đúng|Sai|đúng|sai)|(Đ|S))(?=[\s.:,;)]|$)[.:]?[ \t]*/.exec(seg.slice(p+x.index+x[0].length));
+          if(mm){ key = (mm[1]||mm[2]).charAt(0).toUpperCase()==='Đ' ? 'D' : 'S'; adv += mm[0].length; }
+        }
+        P.push({ s1: p+x.index+x[1].length, s2: p+x.index+adv, key });
+        p += x.index+adv;
       }
-    }
-    
+      return P;
+    };
+    let P = scan(true);
+    const isTF = !!P && P.every(q=>q.key);   // chỉ coi là Đúng/Sai khi cả 4 ý đều có ký hiệu
+    if(!isTF) P = scan(false);
+    if(!P){ parseSkipped++; return; }
+    let endD = s;
+
     const o=P.map((q,i)=>{
       let end=i<3?s+P[i+1].s1:e,a=s+q.s2;
       while(a<end&&/\s/.test(T[a]))a++;
@@ -552,12 +545,15 @@ $('file').onchange = async e => {
         items, eq, img:IM, time:0, scale:'other',
         shufGrp: false, shufQ: true, shufOpt: true
     };
+    const old=lib.find(y=>y.name===ex.name);
+    if(old){ ex.id=old.id; ex.time=old.time||0; ex.scale=old.scale||'other'; ex.shufGrp=!!old.shufGrp; ex.shufQ=old.shufQ!==false; ex.shufOpt=old.shufOpt!==false; }
     lib=lib.filter(y=>y.name!==ex.name); lib.push(ex); saveLib();
     openExam(ex.id);
     
     const miss=qs.filter(q=> q.qtype==='mc' && !q.opts.some(o=>o.ok)).length;
-    if(miss) alert(`Đã đọc ${qs.length} câu. Có ${miss} câu chưa gạch chân đáp án.`);
-    else alert(`Đã tải thành công ${qs.length} câu.`);
+    let msg = miss ? `Đã đọc ${qs.length} câu. Có ${miss} câu chưa gạch chân đáp án.` : `Đã tải thành công ${qs.length} câu.`;
+    if(parseSkipped) msg += `\n⚠ Có ${parseSkipped} câu không tìm đủ 4 phương án A–D nên đã bị bỏ qua (kiểm tra lại file Word).`;
+    alert(msg);
   }catch(err){alert('Lỗi đọc file: '+err.message)}
   e.target.value='';
 };
@@ -596,7 +592,7 @@ function renderTeacherPreview() {
             if(it.qtype === 'sa') {
                 os = `<div style="padding:10px; border:1px dashed var(--bd); background:#f8fafc">Đáp án: ${rich(it.ansRuns)}</div>`;
             } else if(it.qtype === 'tf') {
-                os = it.opts.map((o, j) => `<div class="o disabled"><span class="l">${L4[j]}</span><span>${rich(o.runs)} <b style="color:var(--ok)">(${o.tfKey==='D'?'Đúng':o.tfKey==='S'?'Sai':'Đang thiếu'})</b></span></div>`).join('');
+                os = it.opts.map((o, j) => `<div class="o disabled"><span class="l">${L4[j]}</span><span>${rich(o.runs)} <b style="color:var(--ok)">(${o.tfKey==='D'?'Đúng':o.tfKey==='S'?'Sai':'?'})</b></span></div>`).join('');
             } else {
                 os = it.opts.map((o, j) => `<div class="o disabled ${o.ok?'ok':''}"><span class="l">${L4[j]}</span><span>${rich(o.runs)}</span></div>`).join('');
             }
@@ -607,6 +603,7 @@ function renderTeacherPreview() {
 }
 
 // ================= THUẬT TOÁN ĐẢO ĐỀ TÙY CHỈNH =================
+const shuf = a => { for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; };
 function shuffleExamItems(items, examConf) {
     let clone = JSON.parse(JSON.stringify(items));
     let blocks = [];
@@ -635,21 +632,21 @@ function shuffleExamItems(items, examConf) {
         if (examConf.shufOpt !== false) {
             b.qs.forEach(q => {
                 if (q.qtype !== 'sa') {
-                    const keep = q.opts.some(o => /tất cả|cả\s|all of|none of/i.test(o.runs.map(r=>r.t).join('')));
-                    if (!keep) q.opts.sort(() => Math.random() - 0.5);
+                    const keep = q.opts.some(o => /tất cả|(^|\s)cả\s|all of|none of/i.test(o.runs.map(r=>r.t).join('')));
+                    if (!keep) shuf(q.opts);
                 }
             });
         }
         
         // 2. Đảo Câu hỏi (Không xáo trộn các câu thuộc nhóm Đọc hiểu cố định)
         if (examConf.shufQ !== false && !b.isGroup && b.qs.length > 1) {
-            b.qs.sort(() => Math.random() - 0.5);
+            shuf(b.qs);
         }
     });
 
     // 3. Đảo Khối / Nhóm (Dành cho Tiếng Anh hoặc khi giáo viên tùy chọn)
     if (examConf.shufGrp) {
-        blocks.sort(() => Math.random() - 0.5);
+        shuf(blocks);
     }
 
     // Gộp lại thành mảng tuyến tính để render
@@ -716,16 +713,15 @@ function startStudentExam() {
     // Hẹn giờ
     if(exam.time && exam.time > 0) {
         $('timer-display').classList.remove('hide');
-        timeLeft = exam.time * 60;
-        updateTimerUI();
-        timerInterval = setInterval(() => {
-            timeLeft--;
+        // Tính theo mốc thời gian thực để không bị lệch khi tab bị trình duyệt làm chậm
+        const endAt = Date.now() + exam.time * 60000;
+        const tick = () => {
+            timeLeft = Math.max(0, Math.ceil((endAt - Date.now()) / 1000));
             updateTimerUI();
-            if(timeLeft <= 0) {
-                clearInterval(timerInterval);
-                autoSubmit();
-            }
-        }, 1000);
+            if(timeLeft <= 0) { clearInterval(timerInterval); autoSubmit(); }
+        };
+        tick();
+        timerInterval = setInterval(tick, 1000);
     }
 }
 
@@ -754,7 +750,7 @@ function generateStudentQuestionHTML(q, i, n) {
     const ans = q.studentAns;
     
     if(q.qtype === 'sa') {
-        os = `<input type="text" class="sa-input stu-sa" data-i="${i}" placeholder="Nhập đáp án (VD: -12.5)" value="${ans||''}">`;
+        os = `<input type="text" class="sa-input stu-sa" data-i="${i}" placeholder="Nhập đáp án (VD: -12.5)" value="${esc(ans||'')}">`;
     } 
     else if(q.qtype === 'tf') {
         os = q.opts.map((o, j) => {
@@ -785,14 +781,15 @@ $('list-student').onclick = e => {
     const mc = e.target.closest('.stu-mc');
     if(mc) {
         cur[+mc.dataset.i].studentAns = +mc.dataset.j;
-        renderStudentExam();
+        mc.parentElement.querySelectorAll('.stu-mc').forEach(x => x.classList.toggle('selected', x === mc));
+        return;
     }
     const tf = e.target.closest('.stu-tf');
     if(tf) {
         const i = +tf.dataset.i, j = +tf.dataset.j, val = tf.dataset.val;
         if(!cur[i].studentAns) cur[i].studentAns = {};
         cur[i].studentAns[j] = val;
-        renderStudentExam();
+        tf.parentElement.querySelectorAll('.stu-tf').forEach(x => x.classList.toggle('selected', x === tf));
     }
 };
 
@@ -804,18 +801,25 @@ $('list-student').addEventListener('input', e => {
 
 // ================= XỬ LÝ NỘP BÀI TÍNH ĐIỂM =================
 $('btn-submit-exam').onclick = () => {
-    if(confirm('Bạn có chắc chắn muốn nộp bài?')) {
+    const un = cur.filter(q => q.k === 'q' && (
+        q.qtype === 'sa' ? !q.studentAns :
+        q.qtype === 'tf' ? (!q.studentAns || Object.keys(q.studentAns).length < 4) :
+        q.studentAns === undefined)).length;
+    if(confirm(un ? `Bạn còn ${un} câu chưa trả lời. Vẫn nộp bài?` : 'Bạn có chắc chắn muốn nộp bài?')) {
         if(timerInterval) clearInterval(timerInterval);
         processSubmission();
     }
 };
 
 function autoSubmit() {
+    if(submitted) return;
     alert('Đã hết thời gian làm bài! Hệ thống tự động nộp bài.');
     processSubmission();
 }
 
 async function processSubmission() {
+    if(submitted) return;
+    submitted = true;
     $('loading').classList.remove('hide');
     
     let score = 0;
@@ -850,9 +854,10 @@ async function processSubmission() {
         } 
         else if (q.qtype === 'sa') {
             totalSA++;
-            const expected = q.ansRuns.map(r=>r.t).join('').replace(/,/g, '.').replace(/\s+/g, '').toLowerCase();
-            const given = (q.studentAns || '').replace(/,/g, '.').replace(/\s+/g, '').toLowerCase();
-            if (expected === given && given !== '') {
+            const norm = v => String(v||'').replace(/[−–—]/g,'-').replace(/,/g,'.').replace(/\s+/g,'').toLowerCase();
+            const expected = norm(q.ansRuns.map(r=>r.t).join('')), given = norm(q.studentAns);
+            const nE = Number(expected), nG = Number(given);
+            if (given !== '' && (expected === given || (expected !== '' && isFinite(nE) && isFinite(nG) && Math.abs(nE-nG) < 1e-9))) {
                 correctSA++;
                 score += (isMath ? 0.5 : 0.25);
             }
@@ -881,7 +886,7 @@ async function processSubmission() {
             await fetch(WEBHOOK_URL, {
                 method: 'POST',
                 mode: 'no-cors',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'text/plain;charset=utf-8' },
                 body: JSON.stringify(payload)
             });
         }
@@ -903,6 +908,7 @@ async function processSubmission() {
         console.error(err);
         alert('Có lỗi mạng khi nộp bài. Vui lòng chụp màn hình báo cho giáo viên.');
         $('loading').classList.add('hide');
+        submitted = false;
     }
 }
 </script>
