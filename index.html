@@ -129,6 +129,92 @@ main{padding-left:max(16px,env(safe-area-inset-left));padding-right:max(16px,env
   .overlay .box{max-height:94vh;overflow:auto}
 }
 @supports(height:100dvh){@media (orientation:landscape) and (max-height:520px){.gl{max-height:calc(100dvh - var(--hh) - 12px)}}}
+
+/* Layout cho màn hình làm bài của học sinh */
+.student-main {
+  display: flex;
+  gap: 20px;
+  align-items: flex-start;
+  max-width: 1240px;
+  margin: 24px auto;
+  padding: 0 16px;
+}
+
+/* Bảng danh sách câu hỏi bên trái */
+.q-panel {
+  position: sticky;
+  top: 80px;
+  width: 250px;
+  flex: none;
+  background: var(--card);
+  border-radius: 12px;
+  padding: 16px;
+  border: 1px solid var(--bd);
+  box-shadow: 0 2px 8px rgba(0,0,0,.04);
+}
+
+.student-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.q-panel-title {
+  font-weight: 700;
+  font-size: 16px;
+  color: var(--pri);
+  margin-bottom: 12px;
+  text-align: center;
+}
+
+.q-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 16px;
+  max-height: calc(100vh - 220px);
+  overflow-y: auto;
+}
+
+.q-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  border: 1px solid var(--bd);
+  background: #fff;
+  font-weight: 600;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  color: var(--tx);
+  transition: .2s;
+  font-size: 14px;
+}
+
+/* Các trạng thái của nút câu hỏi */
+.q-btn:hover { background: #f1f5f9; }
+.q-btn.done { background: #eff6ff; border-color: var(--pri); color: var(--pri); } /* Đã làm (chưa nộp) */
+.q-btn.right { background: var(--okbg); border-color: var(--ok); color: var(--ok); } /* Làm đúng */
+.q-btn.wrong { background: var(--badbg); border-color: var(--bad); color: var(--bad); } /* Làm sai */
+
+.q-legend {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--mut);
+}
+
+.q-legend div { display: flex; align-items: center; gap: 6px; }
+.box-leg { width: 14px; height: 14px; border-radius: 4px; border: 1px solid var(--bd); }
+.box-leg.none { background: #fff; }
+.box-leg.right { background: var(--okbg); border-color: var(--ok); }
+.box-leg.wrong { background: var(--badbg); border-color: var(--bad); }
+
+@media (max-width: 900px) {
+  .student-main { flex-direction: column; }
+  .q-panel { width: 100%; position: static; }
+  .q-grid { max-height: 200px; }
+}
 </style>
 </head>
 <body>
@@ -253,8 +339,20 @@ main{padding-left:max(16px,env(safe-area-inset-left));padding-right:max(16px,env
     </div>
   </div>
 
-  <main>
-    <div id="list-student"></div>
+  <main class="student-main">
+    <!-- Cột trái: Bảng câu hỏi -->
+    <aside class="q-panel" id="q-panel">
+       <div class="q-panel-title">Danh sách câu hỏi</div>
+       <div class="q-legend">
+          <div><span class="box-leg none"></span> Chưa làm</div>
+          <div><span class="box-leg right"></span> Làm đúng</div>
+          <div><span class="box-leg wrong"></span> Làm sai</div>
+       </div>
+       <div id="q-grid" class="q-grid"></div>
+    </aside>
+    
+    <!-- Cột phải: Nội dung bài thi -->
+    <div id="list-student" class="student-content"></div>
   </main>
 </div>
 
@@ -763,8 +861,7 @@ function teacherQHtml(it, i, n) {
 }
 
 function renderTeacherPreview() {
-    const en = $('exam-scale').value === 'english';
-    $('q-note').textContent = en ? '(Tiếng Anh: câu hỏi trong mỗi nhóm in đậm luôn giữ nguyên thứ tự)' : '';
+    const en = $('exam-scale').value === 'english';$('q-note').textContent = en ? '(Tiếng Anh: câu hỏi trong mỗi nhóm in đậm luôn giữ nguyên thứ tự)' : '';
     $('chk-shuf-q').disabled = en;
     $('list-teacher').innerHTML = '<div class="note" style="margin-bottom:20px;text-align:center">Đây là chế độ xem trước cấu trúc đề (Không tương tác được). Học sinh sẽ thấy giao diện đảo đề ngẫu nhiên.</div>' + renderBlocks(cur, en, teacherQHtml);
 }
@@ -865,7 +962,7 @@ function gateState() {
 }
 
 function updateGate() {
-    const st = gateState(), box = $('s-schedule'), btn = $('btn-start-exam');
+    const st = gateState(), box = $('s-schedule'), btn =$('btn-start-exam');
     const n = nowMs(), o = exam.openAt || 0, c = exam.closeAt || 0;
     let html = '';
     if(o) html += `🟢 Mở đề: <b>${fmtDT(o)}</b><br>`;
@@ -878,7 +975,7 @@ function updateGate() {
     } else if(st === 'closed') {
         if(gateTimer) { clearInterval(gateTimer); gateTimer = null; }
         html += `<br><b>Đề thi đã đóng.</b> Em không thể làm bài nữa. Vui lòng liên hệ giáo viên nếu cần.`;
-        $('s-name').style.display = 'none'; $('s-class').style.display = 'none'; btn.style.display = 'none';
+        $('s-name').style.display = 'none';$('s-class').style.display = 'none'; btn.style.display = 'none';
     } else if(c) {
         html += `<br>Đề đang mở. Còn <b>${fmtCountdown(Math.ceil((c - n) / 1000))}</b> đến giờ đóng đề.`;
     } else if(o) {
@@ -932,6 +1029,17 @@ function updateTimerUI() {
 
 function renderStudentExam() {
     $('list-student').innerHTML = renderBlocks(cur, exam.scale === 'english', generateStudentQuestionHTML);
+    
+    // Render bảng điều hướng bên trái
+    let html = '';
+    let qCount = 0;
+    cur.forEach((q, i) => {
+        if (q.k === 'q') {
+            qCount++;
+            html += `<div class="q-btn" id="qbtn-${i}" onclick="document.getElementById('q-${i}').scrollIntoView({behavior:'smooth'})">${qCount}</div>`;
+        }
+    });
+    $('q-grid').innerHTML = html;
 }
 
 function generateStudentQuestionHTML(q, i, n) {
@@ -963,7 +1071,19 @@ function generateStudentQuestionHTML(q, i, n) {
             </div>
         `).join('');
     }
-    return `<div class="q"><div class="qh">${QL} ${n}</div><div class="st">${rich(fmtLines(q.stem))}</div><div class="os">${os}</div></div>`;
+    return `<div class="q" id="q-${i}"><div class="qh">${QL} ${n}</div><div class="st">${rich(fmtLines(q.stem))}</div><div class="os">${os}</div></div>`;
+}
+
+function checkAnswered(i) {
+    const q = cur[i];
+    const btn = $('qbtn-' + i);
+    if (!btn) return;
+    let answered = false;
+    if (q.qtype === 'sa') answered = !!q.studentAns && q.studentAns.trim() !== '';
+    else if (q.qtype === 'tf') answered = q.studentAns && Object.keys(q.studentAns).length > 0;
+    else answered = q.studentAns !== undefined;
+    
+    btn.classList.toggle('done', answered);
 }
 
 $('list-student').onclick = e => {
@@ -971,6 +1091,7 @@ $('list-student').onclick = e => {
     if(mc) {
         cur[+mc.dataset.i].studentAns = +mc.dataset.j;
         mc.parentElement.querySelectorAll('.stu-mc').forEach(x => x.classList.toggle('selected', x === mc));
+        checkAnswered(+mc.dataset.i);
         return;
     }
     const tf = e.target.closest('.stu-tf');
@@ -979,12 +1100,14 @@ $('list-student').onclick = e => {
         if(!cur[i].studentAns) cur[i].studentAns = {};
         cur[i].studentAns[j] = val;
         tf.parentElement.querySelectorAll('.stu-tf').forEach(x => x.classList.toggle('selected', x === tf));
+        checkAnswered(i);
     }
 };
 
 $('list-student').addEventListener('input', e => {
     if(e.target.classList.contains('stu-sa')) {
         cur[+e.target.dataset.i].studentAns = e.target.value.trim();
+        checkAnswered(+e.target.dataset.i);
     }
 });
 
@@ -1149,6 +1272,7 @@ async function processSubmission() {
                     • Trả lời ngắn (${isMath?'0.5đ':'0.25đ'}/câu): Đúng ${correctSA}/${totalSA} câu
                 </div>
             </div>
+            <button class="btn" style="margin-top:16px" onclick="reviewExam()">Xem lại bài làm</button>
         `;
     } catch(err) {
         console.error(err);
@@ -1157,6 +1281,45 @@ async function processSubmission() {
         submitted = false;
     }
 }
+
+window.reviewExam = function() {
+    $('loading').classList.add('hide'); // Ẩn màn hình kết quả
+    $('btn-submit-exam').classList.add('hide'); // Ẩn nút nộp bài
+    
+    const isMath = exam.scale === 'math';
+    
+    // Đánh giá từng câu để đổi màu nút ở bảng bên trái
+    cur.forEach((q, i) => {
+        if(q.k !== 'q') return;
+        const btn = $('qbtn-' + i);
+        let isCorrect = false;
+        let isAttempted = false;
+        
+        if (q.qtype === 'mc') {
+            isAttempted = q.studentAns !== undefined;
+            isCorrect = isAttempted && q.opts[q.studentAns].ok;
+        } else if (q.qtype === 'tf') {
+            isAttempted = q.studentAns && Object.keys(q.studentAns).length > 0;
+            let matches = 0;
+            for (let j=0; j<4; j++) {
+                if (q.opts[j].tfKey && q.studentAns && q.studentAns[j] === q.opts[j].tfKey) {
+                    matches++;
+                }
+            }
+            isCorrect = (matches === 4); // Yêu cầu đúng cả 4 ý để báo xanh, nếu không thì đỏ
+        } else if (q.qtype === 'sa') {
+            isAttempted = !!q.studentAns;
+            const norm = v => String(v||'').replace(/[−–—]/g,'-').replace(/,/g,'.').replace(/\s+/g,'').toLowerCase();
+            const expected = norm(q.ansRuns.map(r=>r.t).join('')), given = norm(q.studentAns);
+            const nE = Number(expected), nG = Number(given);
+            isCorrect = given !== '' && (expected === given || (expected !== '' && isFinite(nE) && isFinite(nG) && Math.abs(nE-nG) < 1e-9));
+        }
+        
+        if (btn) {
+            btn.className = 'q-btn ' + (!isAttempted ? '' : (isCorrect ? 'right' : 'wrong'));
+        }
+    });
+};
 </script>
 </body>
 </html>
