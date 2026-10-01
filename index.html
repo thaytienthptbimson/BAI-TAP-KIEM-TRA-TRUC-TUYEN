@@ -531,20 +531,39 @@ function renderTeacherPreview() {
 
 
 // ================= LUỒNG HỌC SINH =================
+// ================= LUỒNG HỌC SINH =================
 async function initStudentFlow(id) {
     $('student-login').classList.remove('hide');
+    
     try {
-        const res = await fetch('exams.json');
+        // Thêm ?t=Date.now() để chống trình duyệt lưu cache, ép tải file mới nhất từ Github
+        const res = await fetch('exams.json?t=' + Date.now());
+        if (!res.ok) throw new Error('Không tìm thấy file exams.json trên server');
         const data = await res.json();
         exam = data.find(x => x.id === id);
     } catch(e) {
+        console.warn('Lỗi tải exams.json từ server:', e);
+    }
+
+    // Nếu trên server không có, tìm thử trong LocalStorage (Dành cho Giáo viên test link trực tiếp trên máy mình)
+    if(!exam) {
         const local = JSON.parse(localStorage.getItem(LK) || '[]');
         exam = local.find(x => x.id === id);
     }
 
+    // Xử lý khi hoàn toàn không tìm thấy đề
     if(!exam) {
-        $('s-exam-name').textContent = 'Không tìm thấy đề thi!';
+        $('s-exam-name').textContent = 'LỖI: Không tìm thấy đề thi!';
         $('s-exam-name').style.color = 'var(--bad)';
+        $('s-name').style.display = 'none';
+        $('s-class').style.display = 'none';
+        $('btn-start-exam').style.display = 'none';
+        
+        let warn = document.createElement('p');
+        warn.style.color = 'var(--bad)';
+        warn.style.fontWeight = 'bold';
+        warn.textContent = 'Hệ thống không tìm thấy mã đề này. Nếu bạn là Giáo viên, vui lòng đảm bảo đã bấm "Xuất thư viện (exams.json)" và tải file đó lên Github đè vào file cũ!';
+        $('sf').appendChild(warn);
         return;
     }
 
@@ -558,7 +577,6 @@ async function initStudentFlow(id) {
         startStudentExam();
     };
 }
-
 function startStudentExam() {
     $('student-login').classList.add('hide');
     $('app-student').classList.remove('hide');$('sh-exam-name').textContent = exam.name;
