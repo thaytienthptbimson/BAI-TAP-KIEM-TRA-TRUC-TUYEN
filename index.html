@@ -120,7 +120,7 @@ img.im{max-width:100%;height:auto;border-radius:8px;margin:8px 0}
       <div class="bar">
         <label class="btn" for="file">📂 Tải file Word đề gốc (.docx)</label>
         <input type="file" id="file" accept=".docx" hidden>
-        <button class="btn sec" id="lx">⬆️️ Xuất thư viện (exams.json)</button>
+        <button class="btn sec" id="lx">⬆ Xuất thư viện (exams.json)</button>
         <label class="btn sec" for="li">⬇️ Nhập thư viện</label>
         <input type="file" id="li" accept=".json" hidden>
       </div>
@@ -262,16 +262,25 @@ window.delExam = (id) => {
 window.openExam = (id) => {
     exam = lib.find(x => x.id === id);
     if(!exam) return;
-    $('reqbox').classList.remove('hide');$('cur-exam-name').textContent = exam.name;
+    $('reqbox').classList.remove('hide');
+    $('cur-exam-name').textContent = exam.name;
     
     // Nạp cài đặt cũ (nếu có), mặc định bật xáo câu hỏi & xáo đáp án, tắt xáo nhóm
     $('time-limit').value = exam.time || 0;
-    $('exam-scale').value = exam.scale \vert{}\vert{} 'other';$('chk-shuf-grp').checked = !!exam.shufGrp; 
+    $('exam-scale').value = exam.scale || 'other';
+    $('chk-shuf-grp').checked = !!exam.shufGrp; 
     $('chk-shuf-q').checked = exam.shufQ !== false; 
     $('chk-shuf-opt').checked = exam.shufOpt !== false; 
 
     cur = JSON.parse(JSON.stringify(exam.items)); 
     renderTeacherPreview();
+};
+
+// Tự động tích chọn đảo nhóm nếu chọn Tiếng Anh
+$('exam-scale').onchange = (e) => {
+    if(e.target.value === 'english') {
+        $('chk-shuf-grp').checked = true;
+    }
 };
 
 $('btn-save-settings').onclick = () => {
@@ -472,15 +481,30 @@ function parse(T,F){
     let isTF = false;
     
     for(const L of labels){
-      const x = new RegExp('(^|\\s)'+L+'\\s*[.)]\\s*(Đ\\.|S\\.|Đ|S|Đúng|Sai)?\\s*', 'i').exec(seg.slice(p));
-      if(!x) return;
-      if(x[2]) isTF = true;
-      P.push({
-          s1: p+x.index+x[1].length,
-          s2: p+x.index+x[0].length,
-          key: x[2] ? (x[2].trim().toUpperCase().startsWith('Đ') ? 'D' : 'S') : null
-      });
-      p+=x.index+x[0].length;
+      // Đã tinh chỉnh Regex cực kỳ cẩn thận để tránh nhận nhầm chữ "A. Đúng" của trắc nghiệm thường.
+      // Bắt buộc phải là "A. Đ." hoặc "A. S." có dấu chấm đi kèm
+      const x = new RegExp('(^|\\s)'+L+'\\s*[.)]\\s*(Đ\\.|S\\.)\\s*', 'i').exec(seg.slice(p));
+      
+      // Nếu regex này không khớp (ví dụ câu trắc nghiệm thường), nó sẽ rơi xuống check thường
+      if(x) {
+          isTF = true;
+          P.push({
+              s1: p+x.index+x[1].length,
+              s2: p+x.index+x[0].length,
+              key: x[2].trim().toUpperCase().startsWith('Đ') ? 'D' : 'S'
+          });
+          p+=x.index+x[0].length;
+      } else {
+          // Bắt đáp án A, B, C, D của MC bình thường
+          const mcReg = new RegExp('(^|\\s)'+L+'\\s*[.)]\\s*').exec(seg.slice(p));
+          if(!mcReg) return;
+          P.push({
+              s1: p+mcReg.index+mcReg[1].length,
+              s2: p+mcReg.index+mcReg[0].length,
+              key: null
+          });
+          p+=mcReg.index+mcReg[0].length;
+      }
     }
     
     const o=P.map((q,i)=>{
@@ -572,7 +596,7 @@ function renderTeacherPreview() {
             if(it.qtype === 'sa') {
                 os = `<div style="padding:10px; border:1px dashed var(--bd); background:#f8fafc">Đáp án: ${rich(it.ansRuns)}</div>`;
             } else if(it.qtype === 'tf') {
-                os = it.opts.map((o, j) => `<div class="o disabled"><span class="l">${L4[j]}</span><span>${rich(o.runs)} <b style="color:var(--ok)">(${o.tfKey==='D'?'Đúng':o.tfKey==='S'?'Sai':'?'})</b></span></div>`).join('');
+                os = it.opts.map((o, j) => `<div class="o disabled"><span class="l">${L4[j]}</span><span>${rich(o.runs)} <b style="color:var(--ok)">(${o.tfKey==='D'?'Đúng':o.tfKey==='S'?'Sai':'Đang thiếu'})</b></span></div>`).join('');
             } else {
                 os = it.opts.map((o, j) => `<div class="o disabled ${o.ok?'ok':''}"><span class="l">${L4[j]}</span><span>${rich(o.runs)}</span></div>`).join('');
             }
