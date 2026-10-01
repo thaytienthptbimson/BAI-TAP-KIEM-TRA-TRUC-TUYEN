@@ -76,6 +76,8 @@ img.im{max-width:100%;height:auto;border-radius:8px;margin:8px 0}
 .grp{margin-bottom:24px}
 .grp.two{display:grid;grid-template-columns:minmax(260px,2fr) 3fr;gap:20px;align-items:start}
 .gl{position:sticky;top:96px;max-height:calc(100vh - 116px);overflow:auto;background:#fffbeb;border:1px solid #fde68a;border-left:5px solid #f59e0b;border-radius:12px;padding:16px}
+.grp.two.en{grid-template-columns:minmax(0,2fr) minmax(280px,1fr)}
+.st{white-space:pre-line}
 .gl .st:last-child{margin-bottom:0}
 .gr .q:last-child{margin-bottom:0}
 .gr .q{margin-bottom:14px}
@@ -627,8 +629,10 @@ function renum(runs, map, isH) {
     return out.map(({ t, f }) => ({ t, f }));
 }
 
+var QL = 'Câu';
 function renderBlocks(list, isEn, qHtml) {
     let n = 0;
+    QL = isEn ? 'Question' : 'Câu';
     return splitBlocks(list, isEn).map(b => {
         let map = null;
         if (isEn) { map = {}; let k = n; b.items.forEach(({ it }) => { if (it.k === 'q') { k++; map[it.on ?? it.no ?? k] = k; } }); }
@@ -637,8 +641,21 @@ function renderBlocks(list, isEn, qHtml) {
             if (it.k === 'q') { n++; R += qHtml(it, i, n); }
             else L += `<div class="st" style="${it.k==='h'?'font-weight:bold;color:var(--pri)':''}">${rich(map ? renum(it.runs, map, it.k === 'h') : it.runs)}</div>`;
         });
-        return `<section class="grp${L && R ? ' two' : ''}">${L ? `<aside class="gl">${L}</aside>` : ''}${R ? `<div class="gr">${R}</div>` : ''}</section>`;
+        return `<section class="grp${L && R ? ' two' : ''}${isEn ? ' en' : ''}">${L ? `<aside class="gl">${L}</aside>` : ''}${R ? `<div class="gr">${R}</div>` : ''}</section>`;
     }).join('');
+}
+
+function fmtLines(runs) {
+    const S = runs.map(r => r.t).join('');
+    if (!/(^|\s)a\.\s[\s\S]*?\sb\.\s[\s\S]*?\sc\.\s/.test(S)) return runs;
+    const ch = [], hits = []; let m;
+    runs.forEach((r, ri) => { for (let k = 0; k < r.t.length; k++) ch.push({ c: r.t[k], ri }); });
+    const re = /[ \t]+(?=[a-e]\.\s)/g;
+    while ((m = re.exec(S))) hits.push([m.index, m[0].length]);
+    hits.reverse().forEach(([a, len]) => { const ri = ch[a].ri; ch.splice(a, len, { c: '\n', ri }); });
+    const out = [];
+    ch.forEach(x => { const l = out[out.length - 1]; if (l && l.ri === x.ri) l.t += x.c; else out.push({ t: x.c, f: runs[x.ri].f, ri: x.ri }); });
+    return out.map(({ t, f }) => ({ t, f }));
 }
 
 function teacherQHtml(it, i, n) {
@@ -650,7 +667,7 @@ function teacherQHtml(it, i, n) {
     } else {
         os = it.opts.map((o, j) => `<div class="o disabled ${o.ok?'ok':''}"><span class="l">${L4[j]}</span><span>${rich(o.runs)}</span></div>`).join('');
     }
-    return `<div class="q"><div class="qh">Câu ${n}</div><div class="st">${rich(it.stem)}</div><div class="os">${os}</div></div>`;
+    return `<div class="q"><div class="qh">${QL} ${n}</div><div class="st">${rich(fmtLines(it.stem))}</div><div class="os">${os}</div></div>`;
 }
 
 function renderTeacherPreview() {
@@ -805,7 +822,7 @@ function generateStudentQuestionHTML(q, i, n) {
             </div>
         `).join('');
     }
-    return `<div class="q"><div class="qh">Câu ${n}</div><div class="st">${rich(q.stem)}</div><div class="os">${os}</div></div>`;
+    return `<div class="q"><div class="qh">${QL} ${n}</div><div class="st">${rich(fmtLines(q.stem))}</div><div class="os">${os}</div></div>`;
 }
 
 $('list-student').onclick = e => {
