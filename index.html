@@ -467,7 +467,7 @@ function classify(items){
 let parseSkipped=0;
 function parse(T,F){
   parseSkipped=0;
-  const re=/(?:^|\n)[ \t]*(?:câu|question)\s*\d+\s*[.:)]?[ \t]*/gi,ms=[...T.matchAll(re)],out=[];
+  const re=/(?:^|\n)[ \t]*(?:câu|question)\s*(\d+)\s*[.:)]?[ \t]*/gi,ms=[...T.matchAll(re)],out=[];
   if(!ms.length)return out;
   out.push(...blocks(T,F,0,ms[0].index));
   ms.forEach((m,k)=>{
@@ -478,17 +478,17 @@ function parse(T,F){
     if(saMatch){
       const a = s+saMatch.index+saMatch[0].length;
       let ae = T.indexOf('\n', a); if(ae<0||ae>e) ae=e;   // đáp án chỉ lấy đến hết dòng
-      out.push({ k:'q', qtype:'sa', stem: mk(T,F,s, s+saMatch.index), ansRuns: mk(T,F,a,ae) });
+      out.push({ k:'q', no:+m[1], qtype:'sa', stem: mk(T,F,s, s+saMatch.index), ansRuns: mk(T,F,a,ae) });
       out.push(...blocks(T,F,ae,e));                      // giữ lại tiêu đề/đoạn văn đứng sau
       return;
     }
 
     const labels = ['A','B','C','D'];
     // Quét 4 phương án A-D. useMark=true: nhận diện ký hiệu Đ./S./Đúng/Sai (dạng câu Đúng/Sai)
-    const scan = useMark => {
+    const scan = (useMark, ci) => {
       const P=[]; let p=0;
       for(const L of labels){
-        const x = new RegExp('(^|\\s)'+L+'\\s*[.)]\\s*','i').exec(seg.slice(p));
+        const x = new RegExp('(^|\\s)'+L+'\\s*[.)]\\s*',ci?'i':'').exec(seg.slice(p));
         if(!x) return null;
         let adv = x[0].length, key = null;
         if(useMark){
@@ -500,9 +500,10 @@ function parse(T,F){
       }
       return P;
     };
-    let P = scan(true);
-    const isTF = !!P && P.every(q=>q.key);   // chỉ coi là Đúng/Sai khi cả 4 ý đều có ký hiệu
-    if(!isTF) P = scan(false);
+    // Ưu tiên nhãn A,B,C,D viết hoa; chỉ khi không có mới thử a,b,c,d viết thường (dạng a) b) c) d) của câu Đúng/Sai)
+    let P = scan(true,false), isTF = !!P && P.every(q=>q.key);
+    if(!isTF) P = scan(false,false);
+    if(!P){ P = scan(true,true); isTF = !!P && P.every(q=>q.key); if(!isTF) P = scan(false,true); }
     if(!P){ parseSkipped++; return; }
     let endD = s;
 
@@ -523,7 +524,7 @@ function parse(T,F){
     }
 
     out.push({
-      k:'q', qtype: isTF ? 'tf' : 'mc',
+      k:'q', no:+m[1], qtype: isTF ? 'tf' : 'mc',
       stem:mk(T,F,s,s+P[0].s1),
       opts:o.map((x,i)=>({ 
           runs: (!isTF && ok===i) ? x.runs.map(r=>({t:r.t,f:r.f&~1})) : x.runs, 
@@ -601,13 +602,40 @@ function splitBlocks(list, isEn) {
 }
 
 // Trái: yêu cầu / đoạn văn (các dòng không phải câu hỏi). Phải: các câu hỏi.
+// Đổi số câu trong lời dẫn (from 1 to 6, Questions 7-11) và ô trống trong đoạn văn ((1), (2)...) theo số câu mới. Không sửa dữ liệu gốc.
+function renum(runs, map, isH) {
+    const S = runs.map(r => r.t).join(''), R = [], seen = new Set();
+    const sub = v => map[v] !== undefined ? String(map[v]) : null;
+    const add = (a, len, v) => { if (v !== null && !seen.has(a)) { seen.add(a); R.push([a, a + len, v]); } };
+    let m;
+    const rp = /\((\d+)\)/g;
+    while ((m = rp.exec(S))) add(m.index + 1, m[1].length, sub(+m[1]));
+    if (isH) {
+        const rg = /(questions?|câu|from|blanks?)(\s*)(\d+)(?:(\s*(?:to|-|–|—|đến|and)\s*)(\d+))?/gi;
+        while ((m = rg.exec(S))) {
+            let p = m.index + m[1].length + m[2].length;
+            add(p, m[3].length, sub(+m[3]));
+            if (m[5] !== undefined) { p += m[3].length + m[4].length; add(p, m[5].length, sub(+m[5])); }
+        }
+    }
+    if (!R.length) return runs;
+    const ch = [];
+    runs.forEach((r, ri) => { for (let k = 0; k < r.t.length; k++) ch.push({ c: r.t[k], ri }); });
+    R.sort((x, y) => y[0] - x[0]).forEach(([a, b, v]) => { const ri = ch[a].ri; ch.splice(a, b - a, ...[...v].map(c => ({ c, ri }))); });
+    const out = [];
+    ch.forEach(x => { const l = out[out.length - 1]; if (l && l.ri === x.ri) l.t += x.c; else out.push({ t: x.c, f: runs[x.ri].f, ri: x.ri }); });
+    return out.map(({ t, f }) => ({ t, f }));
+}
+
 function renderBlocks(list, isEn, qHtml) {
     let n = 0;
     return splitBlocks(list, isEn).map(b => {
+        let map = null;
+        if (isEn) { map = {}; let k = n; b.items.forEach(({ it }) => { if (it.k === 'q') { k++; map[it.on ?? it.no ?? k] = k; } }); }
         let L = '', R = '';
         b.items.forEach(({ it, i }) => {
             if (it.k === 'q') { n++; R += qHtml(it, i, n); }
-            else L += `<div class="st" style="${it.k==='h'?'font-weight:bold;color:var(--pri)':''}">${rich(it.runs)}</div>`;
+            else L += `<div class="st" style="${it.k==='h'?'font-weight:bold;color:var(--pri)':''}">${rich(map ? renum(it.runs, map, it.k === 'h') : it.runs)}</div>`;
         });
         return `<section class="grp${L && R ? ' two' : ''}">${L ? `<aside class="gl">${L}</aside>` : ''}${R ? `<div class="gr">${R}</div>` : ''}</section>`;
     }).join('');
@@ -637,6 +665,7 @@ $('exam-scale').onchange = renderTeacherPreview;
 const shuf = a => { for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; };
 function shuffleExamItems(items, examConf) {
     const clone = JSON.parse(JSON.stringify(items));
+    let oc = 0; clone.forEach(it => { if (it.k === 'q') { oc++; it.on = it.no || oc; } });
     const isEn = examConf.scale === 'english';
     const blocks = splitBlocks(clone, isEn);
 
