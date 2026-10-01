@@ -35,7 +35,7 @@ header{position:sticky;top:0;z-index:10;background:var(--card);box-shadow:0 1px 
 .hdr-title{font-size:18px;font-weight:700;margin:0}
 .bar{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0}
 .info{font-size:14px;color:var(--mut)}
-main{max-width:1000px;margin:24px auto;padding:0 16px 40px}
+main{max-width:1240px;margin:24px auto;padding:0 16px 40px}
 .card{background:var(--card);border-radius:12px;padding:20px;margin-bottom:20px;box-shadow:0 2px 8px rgba(0,0,0,.04);border:1px solid var(--bd)}
 .card summary{font-weight:700;cursor:pointer;font-size:16px}
 .lr{display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid var(--bd)}
@@ -60,7 +60,7 @@ textarea{width:100%;padding:12px;border:2px solid var(--bd);border-radius:10px;f
 .fb{margin-top:12px;font-weight:600;padding:10px;border-radius:8px;background:#f8fafc}
 .fb.good{color:var(--ok);background:var(--okbg)}.fb.no{color:var(--bad);background:var(--badbg)}
 img.im{max-width:100%;height:auto;border-radius:8px;margin:8px 0}
-.timer-box{position:fixed;top:92px;right:20px;background:var(--card);padding:10px 20px;border-radius:30px;box-shadow:0 4px 15px rgba(0,0,0,.1);font-weight:700;font-size:18px;color:var(--pri);border:2px solid var(--pri);z-index:20;display:flex;align-items:center;gap:8px}
+.timer-box{background:#fff;padding:6px 16px;border-radius:30px;font-weight:700;font-size:18px;color:var(--pri);border:2px solid #fff;display:flex;align-items:center;gap:8px}
 .timer-box.danger{color:var(--bad);border-color:var(--bad);animation:pulse 1s infinite}
 @keyframes pulse{0%{transform:scale(1)}50%{transform:scale(1.05)}100%{transform:scale(1)}}
 .sa-input{width:100%;max-width:400px;font-weight:600;color:var(--pri)}
@@ -73,6 +73,13 @@ img.im{max-width:100%;height:auto;border-radius:8px;margin:8px 0}
 #student-info-bar{font-size:14px;opacity:0.9}
 .overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:50}
 .score-result{background:#f8fafc;border-radius:8px;padding:16px;margin-top:16px;text-align:left;border:1px solid var(--bd)}
+.grp{margin-bottom:24px}
+.grp.two{display:grid;grid-template-columns:minmax(260px,2fr) 3fr;gap:20px;align-items:start}
+.gl{position:sticky;top:96px;max-height:calc(100vh - 116px);overflow:auto;background:#fffbeb;border:1px solid #fde68a;border-left:5px solid #f59e0b;border-radius:12px;padding:16px}
+.gl .st:last-child{margin-bottom:0}
+.gr .q:last-child{margin-bottom:0}
+.gr .q{margin-bottom:14px}
+@media(max-width:820px){.grp.two{grid-template-columns:1fr}.gl{position:static;max-height:none}}
 </style>
 </head>
 <body>
@@ -155,7 +162,7 @@ img.im{max-width:100%;height:auto;border-radius:8px;margin:8px 0}
                 <input type="checkbox" id="chk-shuf-grp"> Đảo vị trí Nhóm/Phần (Đoạn văn)
             </label>
             <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-weight:600;">
-                <input type="checkbox" id="chk-shuf-q"> Đảo vị trí Câu hỏi
+                <input type="checkbox" id="chk-shuf-q"> Đảo vị trí Câu hỏi <small id="q-note" class="note" style="margin:0"></small>
             </label>
             <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-weight:600;">
                 <input type="checkbox" id="chk-shuf-opt"> Đảo Đáp án (A, B, C, D)
@@ -175,11 +182,10 @@ img.im{max-width:100%;height:auto;border-radius:8px;margin:8px 0}
       <h1 class="hdr-title" id="sh-exam-name">Tên bài thi</h1>
       <div id="student-info-bar">Học sinh: - Lớp: </div>
     </div>
-    <button class="btn sec" id="btn-submit-exam" style="background:#fff;color:var(--pri)">Nộp bài ngay</button>
-  </div>
-  
-  <div id="timer-display" class="timer-box hide">
-    ⏱ <span id="time-text">--:--</span>
+    <div style="display:flex;align-items:center;gap:12px">
+      <div id="timer-display" class="timer-box hide">⏱ <span id="time-text">--:--</span></div>
+      <button class="btn sec" id="btn-submit-exam" style="background:#fff;color:var(--pri)">Nộp bài ngay</button>
+    </div>
   </div>
 
   <main>
@@ -581,80 +587,85 @@ const rich=runs=>runs.map(r=>{
   return h;
 }).join('');
 
-function renderTeacherPreview() {
-    let h='<div class="note" style="margin-bottom:20px;text-align:center">Đây là chế độ xem trước cấu trúc đề (Không tương tác được). Học sinh sẽ thấy giao diện đảo đề ngẫu nhiên.</div>', n=0;
-    cur.forEach(it => {
-        if(it.k==='h' || it.k==='p') {
-            h += `<div class="st" style="${it.k==='h'?'font-weight:bold;color:var(--pri)':''}">${rich(it.runs)}</div>`;
-        } else {
-            n++;
-            let os = '';
-            if(it.qtype === 'sa') {
-                os = `<div style="padding:10px; border:1px dashed var(--bd); background:#f8fafc">Đáp án: ${rich(it.ansRuns)}</div>`;
-            } else if(it.qtype === 'tf') {
-                os = it.opts.map((o, j) => `<div class="o disabled"><span class="l">${L4[j]}</span><span>${rich(o.runs)} <b style="color:var(--ok)">(${o.tfKey==='D'?'Đúng':o.tfKey==='S'?'Sai':'?'})</b></span></div>`).join('');
-            } else {
-                os = it.opts.map((o, j) => `<div class="o disabled ${o.ok?'ok':''}"><span class="l">${L4[j]}</span><span>${rich(o.runs)}</span></div>`).join('');
-            }
-            h += `<div class="q"><div class="qh">Câu ${n}</div><div class="st">${rich(it.stem)}</div><div class="os">${os}</div></div>`;
-        }
+// Chia danh sách thành các khối. Tiếng Anh: khối mới bắt đầu ở dòng IN ĐẬM ('h') đứng sau nhóm đã có câu hỏi.
+// Môn khác: khối mới bắt đầu ở phần không phải câu hỏi đứng sau các câu hỏi.
+function splitBlocks(list, isEn) {
+    const bl = []; let c = null;
+    list.forEach((it, i) => {
+        const start = !c || (c.hasQ && (isEn ? it.k === 'h' : it.k !== 'q'));
+        if (start) { c = { items: [], hasQ: false }; bl.push(c); }
+        c.items.push({ it, i });
+        if (it.k === 'q') c.hasQ = true;
     });
-    $('list-teacher').innerHTML = h;
+    return bl;
 }
+
+// Trái: yêu cầu / đoạn văn (các dòng không phải câu hỏi). Phải: các câu hỏi.
+function renderBlocks(list, isEn, qHtml) {
+    let n = 0;
+    return splitBlocks(list, isEn).map(b => {
+        let L = '', R = '';
+        b.items.forEach(({ it, i }) => {
+            if (it.k === 'q') { n++; R += qHtml(it, i, n); }
+            else L += `<div class="st" style="${it.k==='h'?'font-weight:bold;color:var(--pri)':''}">${rich(it.runs)}</div>`;
+        });
+        return `<section class="grp${L && R ? ' two' : ''}">${L ? `<aside class="gl">${L}</aside>` : ''}${R ? `<div class="gr">${R}</div>` : ''}</section>`;
+    }).join('');
+}
+
+function teacherQHtml(it, i, n) {
+    let os = '';
+    if(it.qtype === 'sa') {
+        os = `<div style="padding:10px; border:1px dashed var(--bd); background:#f8fafc">Đáp án: ${rich(it.ansRuns)}</div>`;
+    } else if(it.qtype === 'tf') {
+        os = it.opts.map((o, j) => `<div class="o disabled"><span class="l">${L4[j]}</span><span>${rich(o.runs)} <b style="color:var(--ok)">(${o.tfKey==='D'?'Đúng':o.tfKey==='S'?'Sai':'?'})</b></span></div>`).join('');
+    } else {
+        os = it.opts.map((o, j) => `<div class="o disabled ${o.ok?'ok':''}"><span class="l">${L4[j]}</span><span>${rich(o.runs)}</span></div>`).join('');
+    }
+    return `<div class="q"><div class="qh">Câu ${n}</div><div class="st">${rich(it.stem)}</div><div class="os">${os}</div></div>`;
+}
+
+function renderTeacherPreview() {
+    const en = $('exam-scale').value === 'english';
+    $('q-note').textContent = en ? '(Tiếng Anh: câu hỏi trong mỗi nhóm in đậm luôn giữ nguyên thứ tự)' : '';
+    $('chk-shuf-q').disabled = en;
+    $('list-teacher').innerHTML = '<div class="note" style="margin-bottom:20px;text-align:center">Đây là chế độ xem trước cấu trúc đề (Không tương tác được). Học sinh sẽ thấy giao diện đảo đề ngẫu nhiên.</div>' + renderBlocks(cur, en, teacherQHtml);
+}
+$('exam-scale').onchange = renderTeacherPreview;
 
 // ================= THUẬT TOÁN ĐẢO ĐỀ TÙY CHỈNH =================
 const shuf = a => { for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; };
 function shuffleExamItems(items, examConf) {
-    let clone = JSON.parse(JSON.stringify(items));
-    let blocks = [];
-    let curBlock = { pre: [], qs: [], isGroup: false };
-    
-    // Gom các khối (Block) dựa vào phần thông tin chung đứng trước
-    for (let i = 0; i < clone.length; i++) {
-        const item = clone[i];
-        if (item.k !== 'q') {
-            if (curBlock.qs.length > 0) {
-                blocks.push(curBlock);
-                curBlock = { pre: [], qs: [], isGroup: false };
-            }
-            curBlock.pre.push(item);
-        } else {
-            curBlock.qs.push(item);
-            if (item.g === 1) curBlock.isGroup = true;
-        }
-    }
-    if (curBlock.pre.length > 0 || curBlock.qs.length > 0) {
-        blocks.push(curBlock);
-    }
+    const clone = JSON.parse(JSON.stringify(items));
+    const isEn = examConf.scale === 'english';
+    const blocks = splitBlocks(clone, isEn);
 
     blocks.forEach(b => {
-        // 1. Đảo Đáp Án (A, B, C, D)
+        const qs = b.items.map(x => x.it).filter(x => x.k === 'q');
+        // 1. Đảo đáp án A-D
         if (examConf.shufOpt !== false) {
-            b.qs.forEach(q => {
+            qs.forEach(q => {
                 if (q.qtype !== 'sa') {
                     const keep = q.opts.some(o => /tất cả|(^|\s)cả\s|all of|none of/i.test(o.runs.map(r=>r.t).join('')));
                     if (!keep) shuf(q.opts);
                 }
             });
         }
-        
-        // 2. Đảo Câu hỏi (Không xáo trộn các câu thuộc nhóm Đọc hiểu cố định)
-        if (examConf.shufQ !== false && !b.isGroup && b.qs.length > 1) {
-            shuf(b.qs);
+        b.out = b.items.map(x => x.it);
+        // 2. Đảo câu hỏi trong khối: KHÔNG áp dụng cho Tiếng Anh (nhóm in đậm cố định) hay nhóm đọc hiểu
+        if (!isEn && examConf.shufQ !== false && qs.length > 1 && !qs.some(q => q.g === 1)) {
+            const sq = shuf(qs.slice()); let k = 0;
+            b.out = b.out.map(x => x.k === 'q' ? sq[k++] : x);
         }
     });
 
-    // 3. Đảo Khối / Nhóm (Dành cho Tiếng Anh hoặc khi giáo viên tùy chọn)
+    // 3. Đảo vị trí các nhóm (nhóm không có câu hỏi, vd tiêu đề đầu/cuối đề, giữ nguyên chỗ)
     if (examConf.shufGrp) {
-        shuf(blocks);
+        const idx = blocks.map((b, i) => b.hasQ ? i : -1).filter(i => i >= 0);
+        const sh = shuf(idx.map(i => blocks[i]));
+        idx.forEach((i, k) => blocks[i] = sh[k]);
     }
-
-    // Gộp lại thành mảng tuyến tính để render
-    let result = [];
-    blocks.forEach(b => {
-        result.push(...b.pre, ...b.qs);
-    });
-    return result;
+    return blocks.flatMap(b => b.out);
 }
 
 // ================= LUỒNG HỌC SINH =================
@@ -733,16 +744,7 @@ function updateTimerUI() {
 }
 
 function renderStudentExam() {
-    let h='', n=0;
-    cur.forEach((it, i) => {
-        if(it.k === 'q') {
-            n++;
-            h += generateStudentQuestionHTML(it, i, n);
-        } else if (it.k === 'p' || it.k === 'h') {
-            h += `<div class="st" style="${it.k==='h'?'font-weight:bold;color:var(--pri)':''}">${rich(it.runs)}</div>`;
-        }
-    });
-    $('list-student').innerHTML = h;
+    $('list-student').innerHTML = renderBlocks(cur, exam.scale === 'english', generateStudentQuestionHTML);
 }
 
 function generateStudentQuestionHTML(q, i, n) {
