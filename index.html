@@ -4,14 +4,18 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Hệ thống Thi & Ôn luyện Trắc nghiệm</title>
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/mhchem.min.js"></script>
+<!-- Tích hợp MathJax 3 thay cho KaTeX để hỗ trợ tốt nhất trên Github Pages & Đọc giọng nói -->
+<script>
+window.MathJax = {
+  tex: { inlineMath: [['\\(', '\\)']], displayMath: [['\\[', '\\]']], processEscapes: true },
+  options: { ignoreHtmlClass: 'tex2jax_ignore', processHtmlClass: 'tex2jax_process' },
+  startup: { typeset: false } // Sẽ gọi thủ công sau khi render HTML
+};
+</script>
+<script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
-<!-- Tích hợp 2 công cụ giải mã MathType (WMF và EMF) -->
-<script src="https://unpkg.com/wmfjs@0.1.2/dist/wmf.js"></script>
-<script src="https://unpkg.com/emfjs@0.1.2/dist/emf.js"></script>
 <style>
 :root{--pri:#2563eb;--pri2:#1d4ed8;--ok:#16a34a;--okbg:#dcfce7;--bad:#dc2626;--badbg:#fee2e2;--bg:#f8fafc;--tx:#1e293b;--mut:#64748b;--bd:#cbd5e1;--hh:170px; --card:#ffffff;}
 *{box-sizing:border-box}
@@ -94,7 +98,6 @@ img.im{max-width:100%;height:auto;border-radius:8px;margin:8px 0}
 .sch-state.closed{background:var(--badbg);border-color:#fca5a5;color:#991b1b}
 .sch-count{display:block;font-size:26px;font-weight:800;text-align:center;margin-top:4px;font-variant-numeric:tabular-nums}
 
-/* ================= XOAY NGANG ĐIỆN THOẠI (LANDSCAPE) ================= */
 html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
 @supports(height:100dvh){.center-screen{min-height:100dvh}}
 .student-hdr,header{padding-left:max(20px,env(safe-area-inset-left));padding-right:max(20px,env(safe-area-inset-right))}
@@ -130,7 +133,6 @@ main{padding-left:max(16px,env(safe-area-inset-left));padding-right:max(16px,env
 }
 @supports(height:100dvh){@media (orientation:landscape) and (max-height:520px){.gl{max-height:calc(100dvh - var(--hh) - 12px)}}}
 
-/* Layout cho màn hình làm bài của học sinh */
 .student-main {
   display: flex;
   gap: 20px;
@@ -139,7 +141,6 @@ main{padding-left:max(16px,env(safe-area-inset-left));padding-right:max(16px,env
   margin: 24px auto;
   padding: 0 16px;
 }
-
 .q-panel {
   position: sticky;
   top: 80px;
@@ -151,57 +152,15 @@ main{padding-left:max(16px,env(safe-area-inset-left));padding-right:max(16px,env
   border: 1px solid var(--bd);
   box-shadow: 0 2px 8px rgba(0,0,0,.04);
 }
-
-.student-content {
-  flex: 1;
-  min-width: 0;
-}
-
-.q-panel-title {
-  font-weight: 700;
-  font-size: 16px;
-  color: var(--pri);
-  margin-bottom: 12px;
-  text-align: center;
-}
-
-.q-grid {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 16px;
-  max-height: calc(100vh - 220px);
-  overflow-y: auto;
-}
-
-.q-btn {
-  width: 36px;
-  height: 36px;
-  border-radius: 8px;
-  border: 1px solid var(--bd);
-  background: #fff;
-  font-weight: 600;
-  cursor: pointer;
-  display: grid;
-  place-items: center;
-  color: var(--tx);
-  transition: .2s;
-  font-size: 14px;
-}
-
+.student-content { flex: 1; min-width: 0; }
+.q-panel-title { font-weight: 700; font-size: 16px; color: var(--pri); margin-bottom: 12px; text-align: center; }
+.q-grid { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; max-height: calc(100vh - 220px); overflow-y: auto; }
+.q-btn { width: 36px; height: 36px; border-radius: 8px; border: 1px solid var(--bd); background: #fff; font-weight: 600; cursor: pointer; display: grid; place-items: center; color: var(--tx); transition: .2s; font-size: 14px; }
 .q-btn:hover { background: #f1f5f9; }
-.q-btn.done { background: #eff6ff; border-color: var(--pri); color: var(--pri); }
+.q-btn.done { background: #eff6ff; border-color: var(--pri); color: var(--pri); } 
 .q-btn.right { background: var(--okbg); border-color: var(--ok); color: var(--ok); } 
 .q-btn.wrong { background: var(--badbg); border-color: var(--bad); color: var(--bad); } 
-
-.q-legend {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-  font-size: 12px;
-  color: var(--mut);
-}
-
+.q-legend { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 12px; color: var(--mut); }
 .q-legend div { display: flex; align-items: center; gap: 6px; }
 .box-leg { width: 14px; height: 14px; border-radius: 4px; border: 1px solid var(--bd); }
 .box-leg.none { background: #fff; }
@@ -217,7 +176,6 @@ main{padding-left:max(16px,env(safe-area-inset-left));padding-right:max(16px,env
 </head>
 <body>
 
-<!-- Giao diện Đăng nhập Giáo viên -->
 <div id="login" class="center-screen hide">
   <form class="box" id="lf">
     <div class="ic">👨‍🏫</div>
@@ -229,7 +187,6 @@ main{padding-left:max(16px,env(safe-area-inset-left));padding-right:max(16px,env
   </form>
 </div>
 
-<!-- Giao diện Khai báo Học sinh -->
 <div id="student-login" class="center-screen hide">
   <form class="box" id="sf">
     <div class="ic">🎓</div>
@@ -242,16 +199,14 @@ main{padding-left:max(16px,env(safe-area-inset-left));padding-right:max(16px,env
   </form>
 </div>
 
-<!-- Màn hình chờ Nộp bài -->
 <div id="loading" class="overlay hide">
   <div class="box" id="loading-box">
     <div class="ic">⏳</div>
-    <h2>Đang gửi kết quả...</h2>
+    <h2>Đang xử lý...</h2>
     <p>Vui lòng không đóng trình duyệt.</p>
   </div>
 </div>
 
-<!-- Giao diện Quản lý Giáo viên -->
 <div id="app-teacher" class="hide">
   <header>
     <h1 class="hdr-title">📝 Quản lý đề thi</h1>
@@ -320,7 +275,6 @@ main{padding-left:max(16px,env(safe-area-inset-left));padding-right:max(16px,env
   </main>
 </div>
 
-<!-- Giao diện Làm bài Học sinh -->
 <div id="app-student" class="hide">
   <div class="student-hdr">
     <div>
@@ -352,6 +306,14 @@ main{padding-left:max(16px,env(safe-area-inset-left));padding-right:max(16px,env
 <div id="toast" class="toast hide" role="status"></div>
 
 <script>
+// Khởi chạy kích hoạt MathJax
+function triggerMathJax() {
+    if(window.MathJax && window.MathJax.typesetPromise) {
+        window.MathJax.typesetClear();
+        window.MathJax.typesetPromise().catch(err => console.error("MathJax error:", err));
+    }
+}
+
 const PW = '28011981';
 const WEBHOOK_URL = 'https://script.google.com/macros/s/AKfycbyThYxetYYKy3OKCs0eIkkoS8enSVfUa8-oCOnrfPomwek0nYzsj5DTpw4bxsnFM889/exec';
 
@@ -577,31 +539,15 @@ async function pre(buf){
   return{buf,eq};
 }
 
-const prep = m => new Promise(async r => {
-  // === TÍCH HỢP CÔNG CỤ 1: CHUYỂN ĐỔI MATHTYPE (WMF/EMF) SANG ẢNH PNG ===
-  if (/wmf|emf/i.test(m.d.slice(0, 40))) {
-    try {
-      const b64 = m.d.split(',')[1] || m.d;
-      const u8 = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
-      const canvas = document.createElement('canvas');
-      
-      if (/emf/i.test(m.d.slice(0, 40)) && window.EMFJS) {
-        new window.EMFJS.Renderer(u8.buffer).render(canvas);
-      } else if (/wmf/i.test(m.d.slice(0, 40)) && window.WMFJS) {
-        new window.WMFJS.Renderer(u8.buffer).render(canvas);
-      } else {
-        m.bad = 1; return r();
-      }
-      m.d = canvas.toDataURL('image/png'); // Thay bằng PNG
-    } catch (e) {
-      console.warn("Lỗi render MathType:", e);
-      m.bad = 1;
-      return r();
-    }
+const prep = m => new Promise(r => {
+  // Thay vì dùng JS parse WMF gây lỗi trên Github, ta báo lỗi đỏ cho Giáo viên convert
+  if (/emf|wmf/i.test(m.d.slice(0, 40))) { 
+      m.bad = 1; 
+      m.isMathType = true;
+      return r(); 
   }
-
   if (/tiff/i.test(m.d.slice(0, 40))) { m.bad = 1; return r(); }
-
+  
   const i = new Image();
   i.onload = () => {
     let w = i.naturalWidth, h = i.naturalHeight;
@@ -739,12 +685,13 @@ function parse(T,F){
 }
 
 $('file').onchange = async e => {
-  const f=e.target.files[0]; if(!f) return;
+  $('loading').classList.remove('hide');
+  const f=e.target.files[0]; if(!f) { $('loading').classList.add('hide'); return; }
   try{
     const {buf,eq}=await pre(await f.arrayBuffer());
     const r=await mammoth.convertToHtml({arrayBuffer:buf},{styleMap:['u => u']});
     const {T,F,IM}=flatten(r.value),items=parse(T,F),qs=items.filter(x=>x.k==='q');
-    if(!qs.length){alert('Không nhận diện được câu hỏi nào.'); return}
+    if(!qs.length){alert('Không nhận diện được câu hỏi nào.'); $('loading').classList.add('hide'); return}
     await Promise.all(IM.map(prep));
     
     const ex={
@@ -762,26 +709,26 @@ $('file').onchange = async e => {
     if(parseSkipped) msg += `\n⚠ Có ${parseSkipped} câu không tìm đủ 4 phương án A–D nên đã bị bỏ qua (kiểm tra lại file Word).`;
     alert(msg);
   }catch(err){alert('Lỗi đọc file: '+err.message)}
+  $('loading').classList.add('hide');
   e.target.value='';
 };
 
 const TK=/⟪(\d+)⟫|⟦(\d+)⟧|\$\$([\s\S]+?)\$\$|\\\(([\s\S]+?)\\\)|\\\[([\s\S]+?)\\\]|\$([^\s$](?:[^$\n]*?[^\s$])?)\$/g;
 
+// Chuyển sang cú pháp chuỗi cho MathJax
 function kx(l,d){
   if(!l||!l.trim())return'<span style="color:red">[công thức]</span>';
-  try{
-    // === TÍCH HỢP CÔNG CỤ 2: XUẤT THÊM MATHML DÙNG ĐỂ ĐỌC GIỌNG NÓI ===
-    if(window.katex) return katex.renderToString(l,{
-        throwOnError:false,
-        displayMode:!!d,
-        strict:'ignore',
-        output:'htmlAndMathml' 
-    })
-  }catch(e){}
-  return'<code>'+esc(l)+'</code>';
+  return d ? `\\[${l}\\]` : `\\(${l}\\)`;
 }
 
-const imH=k=>{const m=(exam.img||[])[k];return!m?'':m.bad?'<span style="color:red">[Hình MathType lỗi]</span>':`<img class="im" src="${esc(m.d)}" alt="">`};
+const imH = k => {
+    const m = (exam.img||[])[k];
+    if(!m) return '';
+    if(m.isMathType) return `<span style="background:#fee2e2;color:#dc2626;padding:4px 8px;border-radius:6px;font-size:13px;font-weight:600;display:inline-block;margin:4px 0;line-height:1.4;">⚠️ Lỗi MathType: Ảnh WMF/EMF không hỗ trợ trên Web tĩnh.<br>Giải pháp: Mở file Word &rarr; Tab MathType &rarr; Chọn Convert Equations (thành OMML) rồi tải lên lại.</span>`;
+    if(m.bad) return '<span style="color:red">[Ảnh lỗi]</span>';
+    return `<img class="im" src="${esc(m.d)}" alt="">`;
+};
+
 function seg(t){
   let o='',i=0;
   t.replace(TK,(m,a,b,c,d,e,f,off)=>{
@@ -877,6 +824,7 @@ function renderTeacherPreview() {
     const en = $('exam-scale').value === 'english';$('q-note').textContent = en ? '(Tiếng Anh: câu hỏi trong mỗi nhóm in đậm luôn giữ nguyên thứ tự)' : '';
     $('chk-shuf-q').disabled = en;
     $('list-teacher').innerHTML = '<div class="note" style="margin-bottom:20px;text-align:center">Đây là chế độ xem trước cấu trúc đề (Không tương tác được). Học sinh sẽ thấy giao diện đảo đề ngẫu nhiên.</div>' + renderBlocks(cur, en, teacherQHtml);
+    triggerMathJax(); // Kích hoạt render Toán
 }
 $('exam-scale').onchange = renderTeacherPreview;
 
@@ -1040,6 +988,7 @@ function renderStudentExam() {
         }
     });
     $('q-grid').innerHTML = html;
+    triggerMathJax(); // Kích hoạt render Toán
 }
 
 function generateStudentQuestionHTML(q, i, n) {
