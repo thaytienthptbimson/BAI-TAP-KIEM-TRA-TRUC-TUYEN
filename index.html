@@ -60,6 +60,7 @@ textarea{width:100%;padding:12px;border:2px solid var(--bd);border-radius:10px;f
 .fb{margin-top:12px;font-weight:600;padding:10px;border-radius:8px;background:#f8fafc}
 .fb.good{color:var(--ok);background:var(--okbg)}.fb.no{color:var(--bad);background:var(--badbg)}
 img.im{max-width:100%;height:auto;border-radius:8px;margin:8px 0}
+img.imf{vertical-align:middle;margin:0 2px;max-width:100%;height:auto}
 .timer-box{background:#fff;padding:6px 16px;border-radius:30px;font-weight:700;font-size:18px;color:var(--pri);border:2px solid #fff;display:flex;align-items:center;gap:8px}
 .timer-box.danger{color:var(--bad);border-color:var(--bad);animation:pulse 1s infinite}
 @keyframes pulse{0%{transform:scale(1)}50%{transform:scale(1.05)}100%{transform:scale(1)}}
@@ -591,22 +592,258 @@ async function pre(buf){
   return{buf,eq};
 }
 
-const prep=m=>new Promise(r=>{
-  if(/emf|wmf|tiff/i.test(m.d.slice(0,40))){m.bad=1;return r()}
-  const i=new Image();
-  i.onload=()=>{
-    let w=i.naturalWidth,h=i.naturalHeight;
-    if(m.d.length>250000&&w>900){
-      const s=900/w,c=document.createElement('canvas');c.width=w=Math.round(w*s);c.height=h=Math.round(h*s);
-      c.getContext('2d').drawImage(i,0,0,w,h);
-      const n=c.toDataURL(/png/.test(m.d.slice(0,20))?'image/png':'image/jpeg',.85);
-      if(n.length<m.d.length)m.d=n;
+// ================= CÔNG THỨC MATHTYPE: ẢNH WMF/EMF → PNG =================
+// Word lưu công thức MathType thành ảnh vector WMF/EMF mà trình duyệt không hiển thị được.
+// Các hàm dưới đây "phát lại" file WMF/EMF lên canvas rồi xuất PNG để dùng như ảnh thường.
+const SYMT=(()=>{
+  const A=[],
+    lo=' !∀#∃%&∋()∗+,−./0123456789:;<=>?≅ΑΒΧΔΕΦΓΗΙϑΚΛΜΝΟΠΘΡΣΤΥςΩΞΨΖ[∴]⊥_‾αβχδεφγηιϕκλμνοπθρστυϖωξψζ{|}∼',
+    hi='€ϒ′≤⁄∞ƒ♣♦♥♠↔←↑→↓°±″≥×∝∂•÷≠≡≈…⏐⎯↵ℵℑℜ℘⊗⊕∅∩∪⊃⊇⊄⊂⊆∈∉∠∇®©™∏√⋅¬∧∨⇔⇐⇑⇒⇓◊〈®©™∑⎛⎜⎝⎡⎢⎣⎧⎨⎩⎪ 〉∫⌠⎮⌡⎞⎟⎠⎤⎥⎦⎫⎬⎭';
+  [...lo].forEach((c,i)=>A[0x20+i]=c);[...hi].forEach((c,i)=>A[0xA0+i]=c);A[0xF0]='';
+  return A;
+})();
+const SYMRE=/^(symbol|mt symbol|euclid symbol)$/i;
+const MCP={0:'windows-1252',1:'windows-1252',161:'windows-1253',162:'windows-1254',163:'windows-1258',186:'windows-1257',204:'windows-1251',238:'windows-1250'};
+const mcCache={};
+function mcChar(cs,b){
+  const k=cs*256+b;if(k in mcCache)return mcCache[k];
+  let s;try{s=new TextDecoder(MCP[cs]||'windows-1252').decode(new Uint8Array([b]))}catch(e){s=String.fromCharCode(b)}
+  return mcCache[k]=s;
+}
+const mfFam=n=>SYMRE.test(n)?'"Times New Roman","Cambria Math","STIX Two Math","Segoe UI Symbol","DejaVu Serif",serif'
+  :/times/i.test(n)?'"Times New Roman",Times,"Liberation Serif",serif'
+  :/arial|helvetica|calibri|tahoma|verdana/i.test(n)?`"${n}",Arial,Helvetica,"Liberation Sans",sans-serif`
+  :/courier|consolas/i.test(n)?`"${n}","Courier New",monospace`
+  :`"${n}","Times New Roman",serif`;
+const fontCache={};
+function fontOk(n){ // font có cài trên máy không (dùng cho MT Extra, Euclid...)
+  if(n in fontCache)return fontCache[n];
+  const c=document.createElement('canvas').getContext('2d'),w=f=>{c.font='64px '+f;return c.measureText('mwlWM8\uF061\uF072').width};
+  return fontCache[n]=w(`"${n}",monospace`)!==w('monospace')||w(`"${n}",serif`)!==w('serif');
+}
+const mfRgb=(a,b,c)=>`rgb(${a},${b},${c})`;
+const mfDC=()=>({tc:'#000',al:0,pen:{st:0,w:0,c:'#000'},br:{st:0,c:'#fff'},fo:null,cx:0,cy:0,pf:1});
+
+function mfStroke(x,dc,ux){const p=dc.pen;if(!p||(p.st&15)===5)return;x.lineWidth=p.w>0?p.w:ux;x.strokeStyle=p.c;x.stroke()}
+function mfFill(x,dc){const b=dc.br;if(!b||b.st===1)return;x.fillStyle=b.c;x.fill(dc.pf===2?'nonzero':'evenodd')}
+function mfPoly(x,dc,ux,pts,close,fill){
+  if(pts.length<2)return;
+  x.beginPath();x.moveTo(pts[0][0],pts[0][1]);for(let i=1;i<pts.length;i++)x.lineTo(pts[i][0],pts[i][1]);
+  if(close)x.closePath();
+  if(fill)mfFill(x,dc);
+  mfStroke(x,dc,ux);
+}
+// Vẽ một chuỗi ký tự. gl: mảng ký tự; dx: bước tiến của từng ký tự (hoặc null)
+function mfText(x,dc,ux,X,Y,gl,dx,P){
+  const f=dc.fo;if(!f||!gl.length)return;
+  if(f.cs===2&&!SYMRE.test(f.nm)&&!fontOk(f.nm)){P.warn++;return}
+  const px=f.h<0?-f.h:f.h>0?f.h/1.1:12;
+  x.font=`${f.it?'italic ':''}${f.bo?'bold ':''}${px}px ${mfFam(f.nm)}`;
+  x.fillStyle=dc.tc;x.textAlign='left';
+  x.textBaseline=(dc.al&24)===24?'alphabetic':(dc.al&8)?'bottom':'top';
+  if(dc.al&1){X=dc.cx;Y=dc.cy}
+  const al=dc.al&6;let w=0;
+  if(dx)for(let i=0;i<gl.length;i++)w+=dx[i]||0;else w=x.measureText(gl.join('')).width;
+  const x0=al===6?X-w/2:al===2?X-w:X;
+  if(dx){
+    const cl=[];let cx=x0;
+    gl.forEach((g,i)=>{if(/^[\u0300-\u036f]/.test(g)&&cl.length)cl[cl.length-1].s+=g;else cl.push({s:g,x:cx});cx+=dx[i]||0});
+    cl.forEach(c=>x.fillText(c.s.normalize('NFC'),c.x,Y));
+  }else x.fillText(gl.join('').normalize('NFC'),x0,Y);
+  if(f.ul){x.fillRect(x0,Y+px*.1,w,Math.max(px*.05,ux))}
+  if(dc.al&1)dc.cx=X+w;
+}
+// Giải mã byte → ký tự theo font/charset
+function mfGlyphs(f,bytes){
+  if(!f)return[];
+  if(SYMRE.test(f.nm))return bytes.map(b=>SYMT[b]||'');
+  if(f.cs===2)return bytes.map(b=>String.fromCharCode(0xF000+b));
+  return bytes.map(b=>b<32?'':mcChar(f.cs,b));
+}
+function mfCanvas(W,H,sx,sy,tx,ty){
+  const c=document.createElement('canvas');c.width=W;c.height=H;
+  const x=c.getContext('2d');x.setTransform(sx,0,0,sy,tx,ty);x.lineJoin='round';x.lineCap='butt';
+  return{c,x};
+}
+
+// ---------- WMF ----------
+function wmfDraw(buf){
+  const v=new DataView(buf),N=buf.byteLength,u8=new Uint8Array(buf);
+  let o=0,inch=0,bb=null;
+  if(v.getUint32(0,true)===0x9AC6CDD7){bb=[0,1,2,3].map(i=>v.getInt16(6+i*2,true));inch=v.getUint16(14,true);o=22}
+  o+=v.getUint16(o+2,true)*2;
+  const R=[];
+  for(let p=o;p+6<=N;){const sz=v.getUint32(p,true)*2,fn=v.getUint16(p+4,true);if(sz<6)break;R.push([fn,p+6,sz-6]);p+=sz;if(!fn)break}
+  let wo=[0,0],we=null;
+  for(const[fn,p]of R){
+    if(fn===0x20B)wo=[v.getInt16(p+2,true),v.getInt16(p,true)];
+    else if(fn===0x20C)we=[v.getInt16(p+2,true),v.getInt16(p,true)];
+  }
+  if(!we||!we[0]||!we[1]){if(!bb)return null;wo=[bb[0],bb[1]];we=[bb[2]-bb[0],bb[3]-bb[1]]}
+  if(!we[0]||!we[1])return null;
+  let cw,ch;
+  if(bb&&inch){cw=Math.abs(bb[2]-bb[0])/inch*96;ch=Math.abs(bb[3]-bb[1])/inch*96}
+  else{cw=Math.abs(we[0]);ch=Math.abs(we[1])}
+  if(!(cw>=2&&ch>=2)||cw>4000||ch>4000)return null;
+  const sc=Math.min(3,3000/cw),W=Math.max(1,Math.ceil(cw*sc)),H=Math.max(1,Math.ceil(ch*sc));
+  const{c,x}=mfCanvas(W,H,W/we[0],H/we[1],-wo[0]*W/we[0],-wo[1]*H/we[1]);
+  const ux=Math.abs(we[0])/cw,P={warn:0},ob=[],stack=[];
+  let dc=mfDC();
+  const put=a=>{let i=0;while(ob[i])i++;ob[i]=a};
+  const s16=p=>v.getInt16(p,true),u16=p=>v.getUint16(p,true);
+  const cr=p=>mfRgb(u8[p],u8[p+1],u8[p+2]);
+  const pts=(p,n)=>{const a=[];for(let i=0;i<n&&p+i*4+4<=N;i++)a.push([s16(p+i*4),s16(p+i*4+2)]);return a};
+  for(const[fn,p,sz]of R){
+    switch(fn){
+      case 0x2FA:put({t:'p',st:u16(p),w:s16(p+2),c:cr(p+6)});break;
+      case 0x2FC:put({t:'b',st:u16(p),c:cr(p+2)});break;
+      case 0x2FB:{let nm='';for(let i=p+18;i<p+50&&u8[i];i++)nm+=String.fromCharCode(u8[i]);
+        put({t:'f',h:s16(p),bo:s16(p+8)>=600,it:!!u8[p+10],ul:!!u8[p+11],cs:u8[p+13],nm});break}
+      case 0x12D:{const a=ob[u16(p)];if(a){if(a.t==='p')dc.pen=a;else if(a.t==='b')dc.br=a;else if(a.t==='f')dc.fo=a}break}
+      case 0x1F0:ob[u16(p)]=null;break;
+      case 0x1E:stack.push({...dc});break;
+      case 0x127:{const n=s16(p),k=Math.max(0,stack.length+n);if(stack.length&&n<0){dc=stack[k]||dc;stack.length=k}break}
+      case 0x209:dc.tc=cr(p);break;
+      case 0x12E:dc.al=u16(p);break;
+      case 0x106:dc.pf=u16(p);break;
+      case 0x214:dc.cx=s16(p+2);dc.cy=s16(p);break;
+      case 0x213:{const X=s16(p+2),Y=s16(p);x.beginPath();x.moveTo(dc.cx,dc.cy);x.lineTo(X,Y);mfStroke(x,dc,ux);dc.cx=X;dc.cy=Y;break}
+      case 0x324:mfPoly(x,dc,ux,pts(p+2,s16(p)),true,true);break;
+      case 0x325:mfPoly(x,dc,ux,pts(p+2,s16(p)),false,false);break;
+      case 0x538:{const n=u16(p);let q=p+2+n*2;x.beginPath();
+        for(let i=0;i<n;i++){const k=u16(p+2+i*2),a=pts(q,k);q+=k*4;if(a.length){x.moveTo(a[0][0],a[0][1]);a.slice(1).forEach(t=>x.lineTo(t[0],t[1]));x.closePath()}}
+        mfFill(x,dc);mfStroke(x,dc,ux);break}
+      case 0x41B:{const b=s16(p),r=s16(p+2),t=s16(p+4),l=s16(p+6);x.beginPath();x.rect(l,t,r-l,b-t);mfFill(x,dc);mfStroke(x,dc,ux);break}
+      case 0x418:{const b=s16(p),r=s16(p+2),t=s16(p+4),l=s16(p+6);x.beginPath();x.ellipse((l+r)/2,(t+b)/2,Math.abs(r-l)/2,Math.abs(b-t)/2,0,0,7);mfFill(x,dc);mfStroke(x,dc,ux);break}
+      case 0x521:{const n=s16(p),by=[...u8.subarray(p+2,p+2+n)],e=p+2+((n+1)&~1);
+        mfText(x,dc,ux,s16(e+2),s16(e),mfGlyphs(dc.fo,by),null,P);break}
+      case 0xA32:{const Y=s16(p),X=s16(p+2),n=s16(p+4),op=u16(p+6);let q=p+8;if(op&6)q+=8;
+        const by=[...u8.subarray(q,q+n)],e=q+((n+1)&~1);let dx=null;
+        if(e+n*2<=p+sz){dx=[];for(let i=0;i<n;i++)dx.push(s16(e+i*2))}
+        mfText(x,dc,ux,X,Y,mfGlyphs(dc.fo,by),dx,P);break}
     }
-    m.w=w;m.h=h;r();
+  }
+  return{c,cw,ch,warn:P.warn};
+}
+
+// ---------- EMF ----------
+function emfDraw(buf){
+  const v=new DataView(buf),N=buf.byteLength,u8=new Uint8Array(buf);
+  const i32=p=>v.getInt32(p,true),u32=p=>v.getUint32(p,true),s16=p=>v.getInt16(p,true);
+  const R=[];
+  for(let p=0;p+8<=N;){const t=u32(p),sz=u32(p+4);if(sz<8)break;R.push([t,p,sz]);p+=sz;if(t===14)break}
+  const dev=[i32(72),i32(76)],mm=[i32(80),i32(84)],fr=[i32(24),i32(28),i32(32),i32(36)],bd=[i32(8),i32(12),i32(16),i32(20)];
+  let ax,ay,aw,ah,cw,ch;
+  if(dev[0]>0&&mm[0]>0&&fr[2]>fr[0]){
+    const kx=dev[0]/mm[0]/100,ky=dev[1]/mm[1]/100;
+    ax=fr[0]*kx;ay=fr[1]*ky;aw=(fr[2]-fr[0])*kx;ah=(fr[3]-fr[1])*ky;
+    cw=(fr[2]-fr[0])/100/25.4*96;ch=(fr[3]-fr[1])/100/25.4*96;
+  }else{ax=bd[0];ay=bd[1];aw=bd[2]-bd[0]+1;ah=bd[3]-bd[1]+1;cw=aw;ch=ah}
+  if(!(aw>0&&ah>0)||!(cw>=2&&ch>=2)||cw>4000||ch>4000)return null;
+  let mp=1,wo=[0,0],we=[1,1],vo=[0,0],ve=[1,1];
+  for(const[t,p]of R){
+    if(t===17)mp=u32(p+8);else if(t===9)we=[i32(p+8),i32(p+12)];else if(t===10)wo=[i32(p+8),i32(p+12)];
+    else if(t===11)ve=[i32(p+8),i32(p+12)];else if(t===12)vo=[i32(p+8),i32(p+12)];
+  }
+  const lin=(mp===7||mp===8)&&we[0]&&we[1]&&ve[0]&&ve[1];
+  const kx=lin?ve[0]/we[0]:1,ky=lin?ve[1]/we[1]:1,ox=lin?vo[0]-wo[0]*kx:0,oy=lin?vo[1]-wo[1]*ky:0;
+  const sc=Math.min(3,3000/cw),W=Math.max(1,Math.ceil(cw*sc)),H=Math.max(1,Math.ceil(ch*sc));
+  const fx=W/aw,fy=H/ah;
+  const{c,x}=mfCanvas(W,H,kx*fx,ky*fy,(ox-ax)*fx,(oy-ay)*fy);
+  const ux=aw/cw/(kx||1),P={warn:0},ob=[],stack=[];
+  let dc=mfDC(),inPath=false;
+  const cr=p=>mfRgb(u8[p],u8[p+1],u8[p+2]);
+  const stockB=[{st:0,c:'#fff'},{st:0,c:'#c0c0c0'},{st:0,c:'#808080'},{st:0,c:'#404040'},{st:0,c:'#000'},{st:1,c:'#000'}];
+  const stockP=[{st:0,w:0,c:'#fff'},{st:0,w:0,c:'#000'},{st:5,w:0,c:'#000'}];
+  const pts=(p,n,k)=>{const a=[];for(let i=0;i<n;i++){const q=p+i*k*2;if(q+k*2>N)break;a.push(k===2?[s16(q),s16(q+2)]:[i32(q),i32(q+4)])}return a}; // k = số byte mỗi toạ độ (2: int16, 4: int32)
+  const draw=(a,close,fill)=>{
+    if(inPath){a.forEach((t,i)=>i?x.lineTo(t[0],t[1]):x.moveTo(t[0],t[1]));if(close)x.closePath();return}
+    mfPoly(x,dc,ux,a,close,fill);
   };
-  i.onerror=()=>{m.bad=1;r()};
-  i.src=m.d;
-});
+  for(const[t,p]of R){
+    switch(t){
+      case 18:break;
+      case 19:dc.pf=u32(p+8);break;
+      case 22:dc.al=u32(p+8);break;
+      case 24:dc.tc=cr(p+8);break;
+      case 27:dc.cx=i32(p+8);dc.cy=i32(p+12);if(inPath)x.moveTo(dc.cx,dc.cy);break;
+      case 54:{const X=i32(p+8),Y=i32(p+12);
+        if(inPath)x.lineTo(X,Y);else{x.beginPath();x.moveTo(dc.cx,dc.cy);x.lineTo(X,Y);mfStroke(x,dc,ux)}
+        dc.cx=X;dc.cy=Y;break}
+      case 33:stack.push({...dc});break;
+      case 34:{const n=i32(p+8),k=n<0?stack.length+n:n-1;if(stack[k]){dc=stack[k];stack.length=k}break}
+      case 37:{const h=u32(p+8);let a;
+        if(h&0x80000000){const i=h&0x7FFFFFFF;a=i<6?{t:'b',...stockB[i]}:(i>=6&&i<=8)?{t:'p',...stockP[i-6]}:null}
+        else a=ob[h];
+        if(a){if(a.t==='p')dc.pen=a;else if(a.t==='b')dc.br=a;else if(a.t==='f')dc.fo=a}break}
+      case 38:ob[u32(p+8)]={t:'p',st:u32(p+12),w:i32(p+16),c:cr(p+24)};break;
+      case 95:ob[u32(p+8)]={t:'p',st:u32(p+28),w:u32(p+32),c:cr(p+40)};break;
+      case 39:ob[u32(p+8)]={t:'b',st:u32(p+12),c:cr(p+16)};break;
+      case 40:ob[u32(p+8)]=null;break;
+      case 82:{let nm='';for(let i=0;i<32;i++){const ch=v.getUint16(p+40+i*2,true);if(!ch)break;nm+=String.fromCharCode(ch)}
+        ob[u32(p+8)]={t:'f',h:i32(p+12),bo:i32(p+28)>=600,it:!!u8[p+32],ul:!!u8[p+33],cs:u8[p+35],nm};break}
+      case 3:draw(pts(p+28,u32(p+24),4),true,true);break;
+      case 4:draw(pts(p+28,u32(p+24),4),false,false);break;
+      case 86:draw(pts(p+28,u32(p+24),2),true,true);break;
+      case 87:draw(pts(p+28,u32(p+24),2),false,false);break;
+      case 91:{const n=u32(p+24);let q=p+32+n*4;x.beginPath();
+        for(let i=0;i<n;i++){const k=u32(p+32+i*4),a=pts(q,k,2);q+=k*4;if(a.length){x.moveTo(a[0][0],a[0][1]);a.slice(1).forEach(s=>x.lineTo(s[0],s[1]));x.closePath()}}
+        mfFill(x,dc);mfStroke(x,dc,ux);break}
+      case 43:{const l=i32(p+8),tp=i32(p+12),r=i32(p+16),b=i32(p+20);x.beginPath();x.rect(l,tp,r-l,b-tp);mfFill(x,dc);mfStroke(x,dc,ux);break}
+      case 42:{const l=i32(p+8),tp=i32(p+12),r=i32(p+16),b=i32(p+20);x.beginPath();x.ellipse((l+r)/2,(tp+b)/2,Math.abs(r-l)/2,Math.abs(b-tp)/2,0,0,7);mfFill(x,dc);mfStroke(x,dc,ux);break}
+      case 59:inPath=true;x.beginPath();break;
+      case 60:inPath=false;break;
+      case 61:x.closePath();break;
+      case 62:mfFill(x,dc);break;
+      case 63:mfFill(x,dc);mfStroke(x,dc,ux);break;
+      case 64:mfStroke(x,dc,ux);break;
+      case 84:{const X=i32(p+36),Y=i32(p+40),n=u32(p+44),os=u32(p+48),op=u32(p+52),od=u32(p+72);
+        const gl=[];const sym=dc.fo&&SYMRE.test(dc.fo.nm);
+        for(let i=0;i<n;i++){const k=v.getUint16(p+os+i*2,true);
+          if(sym){const b=k>=0xF000?k&255:k;gl.push(b<256?(SYMT[b]||''):String.fromCharCode(k))}
+          else if(dc.fo&&dc.fo.cs===2&&k<256)gl.push(String.fromCharCode(0xF000+k));
+          else gl.push(k<32?'':String.fromCharCode(k))}
+        let dx=null;
+        if(od){const st=op&0x2000?2:1;dx=[];for(let i=0;i<n;i++)dx.push(i32(p+od+i*4*st))}
+        mfText(x,dc,ux,X,Y,gl,dx,P);break}
+    }
+  }
+  return{c,cw,ch,warn:P.warn};
+}
+
+async function metaPng(d){
+  const m=/^data:[^,]*;base64,([\s\S]*)$/.exec(d);if(!m)return null;
+  const bin=atob(m[1]),n=bin.length,u=new Uint8Array(n);
+  for(let i=0;i<n;i++)u[i]=bin.charCodeAt(i);
+  const v=new DataView(u.buffer);let r=null;
+  if(n>88&&v.getUint32(0,true)===1&&v.getUint32(40,true)===0x464D4520)r=emfDraw(u.buffer);
+  else if(n>40&&(v.getUint32(0,true)===0x9AC6CDD7||(v.getUint16(0,true)<=2&&v.getUint16(2,true)===9)))r=wmfDraw(u.buffer);
+  if(!r)return null;
+  return{d:r.c.toDataURL('image/png'),w:r.c.width,h:r.c.height,cw:Math.round(r.cw*100)/100,ch:Math.round(r.ch*100)/100,warn:r.warn};
+}
+
+const prep=async m=>{
+  // Công thức MathType (WMF/EMF): chuyển thành PNG để trình duyệt hiển thị được
+  let o=null;
+  if(!/^data:image\/(png|jpe?g|gif|webp|bmp|svg)/i.test(m.d)){try{o=await metaPng(m.d)}catch(e){}}
+  if(o){m.d=o.d;m.w=o.w;m.h=o.h;m.cw=o.cw;m.ch=o.ch;m.f=1;if(o.warn)m.warn=o.warn;return}
+  if(/emf|wmf|tiff/i.test(m.d.slice(0,40))){m.bad=1;return}
+  return new Promise(r=>{
+    const i=new Image();
+    i.onload=()=>{
+      let w=i.naturalWidth,h=i.naturalHeight;
+      if(m.d.length>250000&&w>900){
+        const s=900/w,c=document.createElement('canvas');c.width=w=Math.round(w*s);c.height=h=Math.round(h*s);
+        c.getContext('2d').drawImage(i,0,0,w,h);
+        const n=c.toDataURL(/png/.test(m.d.slice(0,20))?'image/png':'image/jpeg',.85);
+        if(n.length<m.d.length)m.d=n;
+      }
+      m.w=w;m.h=h;r();
+    };
+    i.onerror=()=>{m.bad=1;r()};
+    i.src=m.d;
+  });
+};
 
 function flatten(html){
   const d=new DOMParser().parseFromString(html,'text/html'),IM=[];let T='';const F=[];
@@ -751,6 +988,10 @@ $('file').onchange = async e => {
     
     const miss=qs.filter(q=> q.qtype==='mc' && !q.opts.some(o=>o.ok)).length;
     let msg = miss ? `Đã đọc ${qs.length} câu. Có ${miss} câu chưa gạch chân đáp án.` : `Đã tải thành công ${qs.length} câu.`;
+    const nf=IM.filter(x=>x.f).length,nb=IM.filter(x=>x.bad).length,nw=IM.filter(x=>x.warn).length;
+    if(nf) msg += `\nĐã chuyển ${nf} công thức MathType thành ảnh.`;
+    if(nw) msg += `\n⚠ ${nw} công thức dùng font MathType (MT Extra...) chưa cài trên máy này nên một số ký hiệu đặc biệt có thể bị thiếu.`;
+    if(nb) msg += `\n⚠ ${nb} hình/công thức không đọc được.`;
     if(parseSkipped) msg += `\n⚠ Có ${parseSkipped} câu không tìm đủ 4 phương án A–D nên đã bị bỏ qua (kiểm tra lại file Word).`;
     alert(msg);
   }catch(err){alert('Lỗi đọc file: '+err.message)}
@@ -764,7 +1005,7 @@ function kx(l,d){
   try{if(window.katex)return katex.renderToString(l,{throwOnError:false,displayMode:!!d,strict:'ignore'})}catch(e){}
   return'<code>'+esc(l)+'</code>';
 }
-const imH=k=>{const m=(exam.img||[])[k];return!m?'':m.bad?'<span style="color:red">[Hình MathType lỗi]</span>':`<img class="im" src="${esc(m.d)}" alt="">`};
+const imH=k=>{const m=(exam.img||[])[k];return!m?'':m.bad?'<span style="color:red">[Công thức MathType lỗi]</span>':m.f?`<img class="imf" src="${esc(m.d)}" width="${m.cw}" height="${m.ch}" alt="">`:`<img class="im" src="${esc(m.d)}" alt="">`};
 function seg(t){
   let o='',i=0;
   t.replace(TK,(m,a,b,c,d,e,f,off)=>{
